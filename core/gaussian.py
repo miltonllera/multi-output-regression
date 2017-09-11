@@ -19,19 +19,24 @@ def gn_params_mle(network: DiGraph, data):
 
     # The parameter matrices
     beta = np.zeros((d, d))
-    var = np.zeros(d)
+
+    # Initial variance is the diagonal of the covariance
+    var = np.diag(np.diag(cov))
 
     for node in network.nodes_iter():
         ps = network.parents(node)
 
-        a = mean_products[ps][:, ps]
-        b = -mean_products[node, ps]
+        if len(ps):
+            sub_idx = np.ix_(ps, ps)
 
-        # Solving for the coefficients
-        beta[node, ps] = linalg.solve(a, b, assume_a='sym', overwrite_a=True, overwrite_b=True)
+            a = mean_products[sub_idx]
+            b = mean_products[node, ps]
 
-        beta_node = beta[node, ps]
-        var[node] = cov[node, node] - np.dot(np.dot(beta_node, cov[ps][:, ps]), beta_node)
+            # Solving for the coefficients
+            beta[node, ps] = linalg.solve(a, b, assume_a='sym')
+
+            beta_node = beta[node, ps]
+            var[node] -= np.dot(np.dot(beta_node, cov[sub_idx]), beta_node)
 
     return sample_mean, var, beta
 

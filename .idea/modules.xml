@@ -2,7 +2,6 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/MGNR.iml" filepath="$PROJECT_DIR$/.idea/MGNR.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/MultiOutputRegression.iml" filepath="$PROJECT_DIR$/.idea/MultiOutputRegression.iml" />
     </modules>
   </component>

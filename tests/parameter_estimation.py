@@ -4,10 +4,12 @@ from numpy.linalg import norm
 
 from structure.graph_generation import random_dag
 from core.gaussian import sample_from_gn, to_mvn, gn_params_mle
+from sklearn.linear_model import LinearRegression
 
 seeds = list(range(101, 200))
 rng = RandomState()
 variables = list(range(5))
+n_samples = 200
 
 mean = np.zeros(len(variables))
 sigma = np.zeros(len(variables)) + 0.2
@@ -24,13 +26,14 @@ for i, s in enumerate(seeds):
     beta = graph.A.T * weight
 
     mvn = to_mvn(mean, sigma, beta, graph, return_mvn=True)
-
-    n_samples = 200
     sample_seed = rng.randint(0, 2**32-1)
 
     data_gn = sample_from_gn(graph, mean, sigma, beta, n_samples, sample_seed)
 
     mu, var, b = gn_params_mle(graph, data_gn)
+
+    print(beta)
+    print(b)
 
     mean_norm = norm(mean - mu)
     cov_norm = norm(sigma - var)
