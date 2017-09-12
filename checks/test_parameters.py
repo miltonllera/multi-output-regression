@@ -10,7 +10,7 @@ from structure.graph_generation import random_dag
 # Parameters
 GraphParams = recordclass('GraphParams', ['n_targets', 'n_features', 'max_parents'])
 SamplingParams = recordclass('SamplingParams', ['n_steps', 'sample_freq', 'burn_in', 'move_prob', 'trace'])
-DataParams = recordclass('DataParams', ['mean', 'variance', 'weight', 'n_samples'])
+DataParams = recordclass('DataParams', ['gen_mean', 'variance', 'gen_weight', 'n_samples'])
 
 # CONFIG
 graph_params = GraphParams(n_targets=5, n_features=10, max_parents=None)

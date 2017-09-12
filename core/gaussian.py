@@ -13,15 +13,13 @@ def gn_params_mle(network: DiGraph, data):
     sample_mean = data.mean(axis=0)
 
     data -= sample_mean
-    mean_products = np.dot(data.T, data) / n
-
-    cov = np.cov(data, rowvar=False)
+    cov = np.dot(data.T, data) / (n - 1)
 
     # The parameter matrices
     beta = np.zeros((d, d))
 
     # Initial variance is the diagonal of the covariance
-    var = np.diag(np.diag(cov))
+    var = np.diagonal(cov).copy()
 
     for node in network.nodes_iter():
         ps = network.parents(node)
@@ -29,8 +27,8 @@ def gn_params_mle(network: DiGraph, data):
         if len(ps):
             sub_idx = np.ix_(ps, ps)
 
-            a = mean_products[sub_idx]
-            b = mean_products[node, ps]
+            a = cov[sub_idx]
+            b = cov[node, ps]
 
             # Solving for the coefficients
             beta[node, ps] = linalg.solve(a, b, assume_a='sym')
@@ -50,12 +48,12 @@ def conditional_mvn_params(mean, sigma, given_values, return_cov=False):
     Parameters
     ==========
     mean: numpy.ndarray
-        The mean of the MVN as a 1-D array.
+        The gen_mean of the MVN as a 1-D array.
 
     sigma: numpy.ndarray
         A 2-D covariance matrix for the MVN of the form:
 
-            sigma = [sigma_11  sigma_12]
+            gen_var = [sigma_11  sigma_12]
                     [sigma_21  sigma_22]
 
         where the sigmas are the submatrices indexed by the subscripts corresponding
@@ -63,19 +61,19 @@ def conditional_mvn_params(mean, sigma, given_values, return_cov=False):
 
     given_values: numpy.ndarray
         The value of the predictor variables. The corresponding means and covariances are the ones in the first
-        give_values.shape[0] entries of mean and cov.
+        give_values.shape[0] entries of gen_mean and cov.
 
     return_cov: bool (default True)
-        If false will only compute the conditional mean. Useful if we only wish to predict without
+        If false will only compute the conditional gen_mean. Useful if we only wish to predict without
         estimating the variance (or confidence of the model).
 
     Returns
     =======
-    mean: np.ndarray
-        The conditional mean of the targets given the inputs
+    gen_mean: np.ndarray
+        The conditional gen_mean of the targets given the inputs
 
-    (mean, cov): tuple 2d
-        The conditional mean and covariance of the MVN
+    (gen_mean, cov): tuple 2d
+        The conditional gen_mean and covariance of the MVN
     """
     n_features = given_values.shape[0]
 
@@ -109,7 +107,7 @@ def to_mvn(mean, var, beta, structure, return_mvn=False, rng=None):
     top_sort = topsort(structure)
     inv_top_sort = np.argsort(top_sort)
 
-    I, W = np.eye(beta.shape[0]), beta[top_sort][:, top_sort]
+    I, W = np.eye(beta.shape[0]), beta[np.ix_(top_sort, top_sort)]
 
     # Use solve triangular to compute the inverse in a numerically stable way
     # by specifying unit_diagonal=True we don't need to pass I - W and can pass just -W
@@ -117,7 +115,7 @@ def to_mvn(mean, var, beta, structure, return_mvn=False, rng=None):
 
     # Compute Sigma as U * S * U^T as found in Schacter and Kenley
     sigma = np.dot(U, np.dot(np.diag(var[top_sort]), U.T))
-    sigma = sigma[inv_top_sort][:, inv_top_sort]
+    sigma = sigma[np.ix_(inv_top_sort, inv_top_sort)]
 
     if return_mvn:
         return stats.multivariate_normal(mean=mean, cov=sigma, seed=rng)

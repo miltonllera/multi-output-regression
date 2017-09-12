@@ -2,6 +2,8 @@ import networkx as nx
 import pylab as pl
 import scipy.sparse as ssp
 import scipy.sparse.csgraph as csgraph
+import pickle
+import pygraphviz as pgv
 
 
 class DiGraph(ssp.lil_matrix):
@@ -21,6 +23,12 @@ class DiGraph(ssp.lil_matrix):
     @property
     def n_edges(self):
         return self.count_nonzero()
+
+    @property
+    def names(self):
+        if self._names is None:
+            return list(range(self.n_nodes))
+        return self._names
 
     def nodes(self, as_names=False):
         if as_names and self._names is not None:
@@ -84,31 +92,34 @@ class DiGraph(ssp.lil_matrix):
             return ancestors
         return sorted(ancestors)
 
+    def has_path(self, u, v):
+        return u in self.ancestors(v)
+
     def can_add(self, u, v):
         return u != v
 
 
 class MBCGraph(DiGraph):
-    def __init__(self, arg1, features, shape=None, dtype=None, copy=False, names=None):
+    def __init__(self, arg1, n_features, shape=None, dtype=None, copy=False, names=None):
         super().__init__(arg1, shape, dtype, copy, names)
         targets = set(self.nodes())
-        targets.remove(features)
+        targets.remove(list(range(n_features)))
 
-        self.features = set(features)
+        self.features = set(n_features)
         self.targets = targets
 
     def can_add(self, u, v):
         return u != v and (u in self.targets or {u, v} <= self.features)
 
 
-def topsort(G: ssp.spmatrix, nbunch=None, reverse=True):
+def topsort(G: ssp.spmatrix, nodes=None, reverse=True):
     order = []
     seen = set()
     explored = set()
 
-    if nbunch is None:
-        nbunch = G.nodes_iter()
-    for v in nbunch:  # process all vertices in G
+    if nodes is None:
+        nodes = G.nodes_iter()
+    for v in nodes:  # process all vertices in G
         if v in explored:
             continue
         fringe = [v]  # nodes yet to look at
@@ -138,5 +149,62 @@ def topsort(G: ssp.spmatrix, nbunch=None, reverse=True):
 
 
 def plot_digraph(graph: DiGraph):
-    nx.draw_networkx(nx.from_scipy_sparse_matrix(graph))
+    nx.draw_networkx(nx.from_scipy_sparse_matrix(graph, create_using=nx.DiGraph()))
     pl.plot()
+
+
+def load_graph(path):
+    dot_graph = pgv.AGraph(filename=path)
+
+    if 'names' in dot_graph.graph_attr:
+        names = dot_graph.graph_attr['names']
+    else:
+        names = None
+
+    dtype = dot_graph.graph_attr['data_type']
+    if dtype  == 'int':
+        dtype = int
+    elif dtype == 'bool':
+        dtype = bool
+    elif dtype == 'float64':
+        dtype = float
+    else:
+        raise ValueError('Unrecognized data type')
+
+    n_nodes = dot_graph.number_of_nodes()
+    graph = DiGraph((n_nodes, n_nodes), dtype=dtype, names=names)
+
+    if dtype == bool:
+        u, v = zip(dot_graph.edges_iter())
+        u = list(map(int, u))
+        v = list(map(int, v))
+
+        graph[u, v] = True
+
+    else:
+        for u, v in dot_graph.edges():
+            weight = dot_graph.get_edge(u, v).attr['weight']
+            graph[int(u), int(v)] = weight
+
+    return graph
+
+
+def save_graph(graph: DiGraph, path):
+    if path[-3:] != '.gv' and path[-4:] != '.dot':
+        path += '.gv'
+
+    if graph._names is None:
+        dot_graph = pgv.AGraph(data_type=str(graph.dtype))
+    else:
+        dot_graph = pgv.AGraph(data_type=str(graph.dtype), names=graph._names)
+
+    dot_graph.add_nodes_from(graph.nodes())
+
+    if graph.dtype == bool:
+        dot_graph.add_edges_from(graph.edges())
+
+    else:
+        for u, v in graph.edges_iter():
+            dot_graph.add_edge(u, v, weight=graph[u, v])
+
+    dot_graph.write(path)

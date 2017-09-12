@@ -1,5 +1,6 @@
 import networkx as nx
 import numpy as np
+from docutils.nodes import paragraph
 from scipy.linalg import solve_triangular, cholesky
 from scipy.special import gammaln
 
@@ -120,17 +121,17 @@ class BGeScore:
             log_det2 = np.log(a - b ** 2 / sub_sn)
 
         elif d_p == 2:
-            sub_sn = self.sn[parent_set][:, parent_set]
+            sub_sn = self.sn[np.ix_(parent_set, parent_set)]
             b = self.sn[x, parent_set].reshape(-1, 1)
 
             log_det_p = np.log(det_2by2(sub_sn))
             log_det2 = np.log(det_2by2(sub_sn - np.dot(b, b.T) / a)) + np.log(a) - log_det_p
 
         else:
-            sub_sn = self.sn[parent_set][:, parent_set]
+            sub_sn = self.sn[np.ix_(parent_set, parent_set)]
             b = self.sn[x, parent_set]
 
-            l = cholesky(sub_sn, lower=True, overwrite_a=True)
+            l = cholesky(sub_sn, lower=True)
             c = solve_triangular(l, b, lower=True)
 
             log_det_p = logdet_traingular(l)
@@ -140,3 +141,5 @@ class BGeScore:
 
     def score(self, structure):
         return self(structure)
+
+
