@@ -7,6 +7,14 @@ from structure.graphs import DiGraph, topsort
 
 
 def gn_params_mle(network: DiGraph, data):
+    """
+    Compute the MLE of the parameters for each Gaussian factor in the network. The MLE of a Gaussian Network given some
+    data vector D is characterized by the unconditional mean, conditional variance and weights of the influence of the
+    parents of a node when computing the conditional mean given some data.
+
+
+
+    """
     n, d = data.shape
 
     # Compute sufficient statistics
@@ -40,20 +48,34 @@ def gn_params_mle(network: DiGraph, data):
 
 
 def mvn_params_mle(data):
+    """
+    Return de MLE estimate of a Multivariate Gaussian Distribution.
+
+    Parameters
+    ----------
+    data: numpy.ndarray of size (N, D)
+
+    Returns
+    --------
+    (mean, cov): 2-tuple
+        The MLE mean and covariance obtained by deriving the log-likelihood.
+         The parameters have shapes (D,) and (D, D) respectively
+
+    """
     return np.mean(data, axis=0), np.cov(data, rowvar=False)
 
 
 def conditional_mvn_params(mean, sigma, given_values, return_cov=False):
     """
     Parameters
-    ==========
+    ----------
     mean: numpy.ndarray
         The gen_mean of the MVN as a 1-D array.
 
     sigma: numpy.ndarray
         A 2-D covariance matrix for the MVN of the form:
 
-            gen_var = [sigma_11  sigma_12]
+            sigma = [sigma_11  sigma_12]
                     [sigma_21  sigma_22]
 
         where the sigmas are the submatrices indexed by the subscripts corresponding
@@ -68,11 +90,11 @@ def conditional_mvn_params(mean, sigma, given_values, return_cov=False):
         estimating the variance (or confidence of the model).
 
     Returns
-    =======
-    gen_mean: np.ndarray
-        The conditional gen_mean of the targets given the inputs
+    -------
+    mean: numpyp.ndarray
+        The conditional mean of the targets given the inputs
 
-    (gen_mean, cov): tuple 2d
+    (mean, cov): tuple 2d
         The conditional gen_mean and covariance of the MVN
     """
     n_features = given_values.shape[0]

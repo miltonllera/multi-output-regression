@@ -2,15 +2,52 @@ import networkx as nx
 import pylab as pl
 import scipy.sparse as ssp
 import scipy.sparse.csgraph as csgraph
-import pickle
 import pygraphviz as pgv
 
 
 class DiGraph(ssp.lil_matrix):
-    def __init__(self, arg1, shape=None, dtype=None, copy=False, names=None):
+    """
+    An implementation of a directed graph with a Sparse Matrix representation using Scipy's sparse module.
+    Specifically the lil_matrix representation is used since it allows for efficient modification of the
+    sparse structure, which is useful for sampling.
+
+    Parameters
+    ----------
+    arg1: object
+
+        This can be instantiated in several ways:
+            DiGraph(D)
+                with a dense matrix or rank-2 ndarray D
+
+            DiGraph(S)
+                with another sparse matrix S (equivalent to S.tolil())
+
+            DiGraph((M, N), [dtype])
+                to construct an empty matrix with shape (M, N)
+                dtype is optional, defaulting to dtype='d'.
+
+    shape: 2-tuple
+        The size of the underlying dimensions
+
+    dtype: type
+        The type of the data. Supported are bool for adjacency representations, and float for weighted edges
+
+    copy: bool
+        In case arg1 is a sparse matrix, whether to copy its contents when constructing a new instance
+
+    names: list of strings
+        A list of true names for the nodes of the graph
+
+    Attributes
+    ----------
+    names: list
+        The list of names of the nodes if any. Useful if using non numerical identifiers for the nodes
+
+    """
+    def __init__(self, arg1, shape=None, dtype=bool, copy=False, names=None):
         if dtype is None:
             dtype = bool
-        elif dtype != bool:
+        elif dtype not in [bool, float]:
             raise ValueError('Either adjacency or weighted graph')
 
         super().__init__(arg1, shape, dtype, copy)
@@ -98,8 +135,12 @@ class DiGraph(ssp.lil_matrix):
     def can_add(self, u, v):
         return u != v
 
+    def copy(self):
+        a = DiGraph(arg1=self, copy=True, names=self._names)
+        return a
 
-class MBCGraph(DiGraph):
+
+class RegressorDiGraph(DiGraph):
     def __init__(self, arg1, n_features, shape=None, dtype=None, copy=False, names=None):
         super().__init__(arg1, shape, dtype, copy, names)
         targets = set(self.nodes())
@@ -162,9 +203,8 @@ def load_graph(path):
         names = None
 
     dtype = dot_graph.graph_attr['data_type']
-    if dtype  == 'int':
-        dtype = int
-    elif dtype == 'bool':
+
+    if dtype == 'bool':
         dtype = bool
     elif dtype == 'float64':
         dtype = float
