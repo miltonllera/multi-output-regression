@@ -8,9 +8,12 @@ def get_rng(seed=None):
     return np.random.RandomState(seed)
 
 
-def power_set(iterable, max_size):
+def power_set(iterable, max_size=-1):
     # list(chain.from_iterable(map(set, combinations(iterable, r)) for r in range(min(len(iterable), max_size) + 1)))
-    sets = chain.from_iterable(combinations(iterable, r) for r in range(len(iterable) + 1))
+    if max_size == -1:
+        max_size = len(iterable)
+
+    sets = chain.from_iterable(combinations(iterable, r) for r in range(max_size + 1))
     sets = map(set, sets)
     return list(sets)
 

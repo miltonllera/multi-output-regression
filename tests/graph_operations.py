@@ -43,7 +43,8 @@ for i, s in enumerate(seeds):
             ancestors = set(g.ancestors(v))
 
             if parents != real_parents:
-                raise ValueError('Error in graph created with seed {2}\n Expected ancestors for node {3}: {0}\n got: {1}'
+                raise ValueError(
+                    'Error in graph created with seed {2}\n Expected ancestors for node {3}: {0}\n got: {1}'
                                  .format(s, real_ancestors, ancestors, v))
 
             real_descendants = set(nx_g.successors(v))

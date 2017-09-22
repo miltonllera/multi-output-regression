@@ -1,18 +1,43 @@
 import numpy as np
 import scipy.linalg as linalg
 from scipy import stats
+from scipy.sparse import spmatrix, csr_matrix
 
 from core.misc import get_rng
 from structure.graphs import DiGraph, topsort
 
 
-def gn_params_mle(network: DiGraph, data):
+# noinspection PyTupleAssignmentBalance
+def gn_params_mle(network: DiGraph, data, sparse=False):
     """
     Compute the MLE of the parameters for each Gaussian factor in the network. The MLE of a Gaussian Network given some
     data vector D is characterized by the unconditional mean, conditional variance and weights of the influence of the
     parents of a node when computing the conditional mean given some data.
 
+    Parameters
+    ----------
+    network: DiGraph
+        The graph where nonzero entries represent the edges with rows representing the tails and columns the heads.
 
+    data: numpy.ndarray
+        The data used to compute the MLE of shape (n, d) where n is the number of samples and d is the number of nodes.
+
+    sparse: bool (default False)
+        If true will return the weights as a sparse matrix instead of an numpy ndarray. Useful when the graph is sparse.
+
+    Returns
+    -------
+    (mean, var, beta): 3-tuple
+        The computed parameters of shapes (d,), (d,) and (d, d) respectively with the value of the interaction weights.
+
+    Notes
+    -----
+    Uses scipy.linalg.lstsq to find the Least Squares Solution to each conditional regression. This solves as:
+
+        1 - Compute the QR decomposition of X: X = Q * R, where Q^T * Q = I and R is upper triangular
+        2 - Solve X * w = y <=>  R * w = Q^T * y
+
+    This method is numerically stable and runs in O(N * D^2)
 
     """
     n, d = data.shape
@@ -33,16 +58,16 @@ def gn_params_mle(network: DiGraph, data):
         ps = network.parents(node)
 
         if len(ps):
-            sub_idx = np.ix_(ps, ps)
+            X, y = data[:, ps], data[:, node]
 
-            a = cov[sub_idx]
-            b = cov[node, ps]
+            # # Solving for the coefficients
+            w = linalg.lstsq(X, y)[0]
 
-            # Solving for the coefficients
-            beta[node, ps] = linalg.solve(a, b, assume_a='sym')
+            beta[node, ps] = w
+            var[node] -= np.dot(np.dot(w, cov[np.ix_(ps, ps)]), w)
 
-            beta_node = beta[node, ps]
-            var[node] -= np.dot(np.dot(beta_node, cov[sub_idx]), beta_node)
+    if sparse:
+        beta = csr_matrix(beta)
 
     return sample_mean, var, beta
 
@@ -126,6 +151,41 @@ def conditional_mvn_params(mean, sigma, given_values, return_cov=False):
 
 
 def to_mvn(mean, var, beta, structure, return_mvn=False, rng=None):
+    """
+    Transform the parameters of a Gaussian Network into the parameters of the corresponding Multivariate Normal
+    distribution using the formulas in Schacter and Kenley (1989), Appendix B (can also be found in Murphy (2009)).
+
+    Parameters
+    ----------
+    mean: numpy.ndarray
+        The unconditional mean vector of size (d,). It is the same as the mean of a MVN
+
+    var: numpy.ndarray
+        The variance of each variable conditioned on its parents in the network
+
+    beta: numpy.ndarray or scipy.sparse.spmatrix
+        The values of the coefficients used when calculting the conditional distributions of each variable
+
+    return_mvn: bool
+        See below in returned values
+
+    rng: numpy.random.RandomState
+        If return_mvn is true this is the random number generator used in the frozen multivariate normal instance.
+
+    Returns
+    -------
+    (mean, sigma): 2-tuple
+        The corresponding mean (it's the same as in the input) and covariance matrix of shapes (d,) and (d, d)
+        respectively
+
+    mvn: scipy.stats.multivariate_normal
+        If return_mvn is true will return a frozen scipy.stats.multivariate_normal instance with the corresponding
+         mean and covariance matrix.
+
+    """
+    if isinstance(beta, spmatrix):
+        beta = beta.A
+
     top_sort = topsort(structure)
     inv_top_sort = np.argsort(top_sort)
 
@@ -146,9 +206,20 @@ def to_mvn(mean, var, beta, structure, return_mvn=False, rng=None):
 
 
 def sample_from_gn(graph: DiGraph, mean, sigma, beta=None, size=1, rng=None):
+    """
+    Obtain samples from a Gaussian Network by using the conditional probabilities it encodes.
+
+    graph: DigGraph
+        The adjacency matrix of the graph. If graph.dtype is float then the adjacency matrix also encodes the weights
+         of the arcs and the parameter beta will be ignored
+
+    mean: numpy.ndarray
+
+
+    """
     if isinstance(mean, int):
         mean = mean + np.zeros(graph.n_nodes)
-    if beta is None:
+    if graph.dtype == float or beta is None:
         beta = graph.A.T.astype(float)
     if isinstance(beta, (int, float)):
         beta = beta * graph
@@ -177,6 +248,33 @@ def sample_from_gn(graph: DiGraph, mean, sigma, beta=None, size=1, rng=None):
 
 
 def update_normal_wishart_parameters(data, mu0, T0, k, v):
+    """
+    Compute the posterior parameters of a Normal-Wishart distribution. This distribution serves as joint distribution
+    over means and covariances
+
+    Parameters
+    ----------
+    data: numpy.ndarray
+        A (N, D) shaped numpy.ndarray with the sample data to use for the update.
+
+    mu0: numpy.ndarray
+        The numpy.ndarray of size (D,) with the prior mean
+
+    T0: numpy.ndarray
+        The numpy.ndarray of size (D, D) with the prior scatter matrix
+
+    k: int
+        The equivalent sample size which controls the strength of the prior mean
+
+    v: int
+        The degrees of freedom which controls the strength of prior scatter matrix
+
+    Returns
+    -------
+    (mu_n, Sn, kn, vn): 4-tuple
+        The updated values after seeing the N instances in data
+
+    """
     n, d = data.shape
 
     sample_mean = np.mean(data, axis=0)
@@ -192,10 +290,46 @@ def update_normal_wishart_parameters(data, mu0, T0, k, v):
 
 
 def mvn_mle(data, rng=None):
+    """
+    Return the MVN whose parameters maximize the likelihood of the data as a Scipy frozen multivariate normal rv.
+
+    Parameters
+    ----------
+    data: numpy.ndarray
+        An array of shape (N, D) wih the sample data used to estimate the MVN
+
+    rng: numpy.random.RandomState
+        The random generator used to initialize the random variable
+
+    Returns
+    -------
+    mvn: Scipy.stats.multivariate_normal
+        The expected MVN
+
+    """
     mean, cov = mvn_params_mle(data)
     return stats.multivariate_normal(mean=mean, cov=cov, seed=rng)
 
 
 def conditional_mvn(mvn, x):
+    """
+    Return the conditional MVN whose parameters maximize the likelihood of the data as a Scipy frozen
+    multivariate normal conditioned on some observations.
+
+    Parameters
+    ----------
+    mvn: Scipy.stats.multivariate_normal
+        The joint MVN normal before observing the variables
+
+    x: numpy.ndarray
+        The conditioning values. The corresponding dimensions are assumed to be the the x.shape[1] first ones of
+        the mean and the top left sub-matrix of size (x.shape[1], x.shape[1]).
+
+    Returns
+    -------
+    mvn: Scipy.stats.multivariate_normal
+        The expected MVN
+
+    """
     mean, cov = conditional_mvn_params(mvn.mean, mvn.cov, x, return_cov=True)
     return stats.multivariate_normal(mean=mean, cov=cov, seed=mvn.random_state)

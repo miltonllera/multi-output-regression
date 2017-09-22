@@ -49,19 +49,19 @@ for i, s in enumerate(seeds):
     # print(b)
 
     mean_norm = norm(gen_mean - mu)
-    cov_norm = norm(gen_var - var)
+    var_norm = norm(gen_var - var)
     # noinspection PyTypeChecker
     beta_norm = norm(beta - b)
     sklearn_check = sklearn_fit(graph, b)
 
     total_mean += mean_norm
-    total_cov += cov_norm
+    total_cov += var_norm
     total_beta += beta_norm
     totla_diff_sklearn += sklearn_check
 
     print(' Distance between means: {0}\n Distance between variances: {1}'
           '\n Distance between parameters: {2}\n Distance to Sklearn estimate: {3}'.
-          format(mean_norm, cov_norm, beta_norm, sklearn_check))
+          format(mean_norm, var_norm, beta_norm, sklearn_check))
 
 print('Finished: \n Mean norm: {0}\n Cov Norm: {1}\n Beta Norm: {2}\n Mean diff sklearn estimate: {3}'.
       format(total_mean / len(seeds), total_cov / len(seeds), total_beta / len(seeds), totla_diff_sklearn / len(seeds)))

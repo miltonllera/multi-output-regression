@@ -1,14 +1,13 @@
-import networkx as nx
 import numpy as np
-from docutils.nodes import paragraph
 from scipy.linalg import solve_triangular, cholesky
 from scipy.special import gammaln
 
+from structure.graphs import DiGraph
 from core.misc import det_2by2, logdet_traingular
 from core.gaussian import update_normal_wishart_parameters
 
 
-class BGeScore:
+class BGe:
     """
         The log-score the structure of the distribution of a variable given a set of parents according to the data
         using the BGe metric (equation 17) as found in Learning Gaussian Networks, Heckerman & Geiger, 1994.
@@ -90,8 +89,8 @@ class BGeScore:
     def __call__(self, network):
         if isinstance(network, tuple):
             structure = [network]
-        elif isinstance(network, nx.DiGraph):
-            structure = [(n, network.predecessors(n)) for n in network.nodes_iter()]
+        elif isinstance(network, DiGraph):
+            structure = [(n, network.T[n].nonzero()[1]) for n in network.nodes_iter()]
         else:
             structure = network
 

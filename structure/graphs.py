@@ -1,7 +1,7 @@
-import networkx as nx
-import pylab as pl
 import scipy.sparse as ssp
 import scipy.sparse.csgraph as csgraph
+import networkx as nx
+import pylab as pl
 import pygraphviz as pgv
 
 
@@ -9,7 +9,8 @@ class DiGraph(ssp.lil_matrix):
     """
     An implementation of a directed graph with a Sparse Matrix representation using Scipy's sparse module.
     Specifically the lil_matrix representation is used since it allows for efficient modification of the
-    sparse structure, which is useful for sampling.
+    sparse structure, which is useful for sampling. Most methods are aliases for operations we can perform directly
+    with the ones we inherit from the Scipy sparse matrix class.
 
     Parameters
     ----------
@@ -86,7 +87,7 @@ class DiGraph(ssp.lil_matrix):
         return zip(*self.nonzero())
 
     def add_edge(self, u, v, value=None):
-        if not self.can_add(u, v):
+        if not self.is_valid_edge(u, v):
             raise ValueError('Edge {0}-->{1} cannot be added'.format(u, v))
 
         if value is None:
@@ -94,7 +95,7 @@ class DiGraph(ssp.lil_matrix):
         self[u, v] = value
 
     def add_edges(self, edges, value=None):
-        if any(map(lambda e: not self.can_add(*e), edges)):
+        if any(map(lambda e: not self.is_valid_edge(*e), edges)):
             raise ValueError('At least one edge cannot be added')
 
         if value is None:
@@ -132,28 +133,30 @@ class DiGraph(ssp.lil_matrix):
     def has_path(self, u, v):
         return u in self.ancestors(v)
 
-    def can_add(self, u, v):
+    def is_valid_edge(self, u, v):
         return u != v
 
     def copy(self):
-        a = DiGraph(arg1=self, copy=True, names=self._names)
+        arg1 = ssp.lil_matrix.copy(self)
+        a = DiGraph(arg1=arg1, names=self._names)
         return a
+
+    def to_nx_digraph(self):
+        return nx.from_scipy_sparse_matrix(self, create_using=nx.DiGraph())
 
 
 class RegressorDiGraph(DiGraph):
     def __init__(self, arg1, n_features, shape=None, dtype=None, copy=False, names=None):
         super().__init__(arg1, shape, dtype, copy, names)
-        targets = set(self.nodes())
-        targets.remove(list(range(n_features)))
+        self.n_features = n_features
 
-        self.features = set(n_features)
-        self.targets = targets
-
-    def can_add(self, u, v):
-        return u != v and (u in self.targets or {u, v} <= self.features)
+    def is_valid_edge(self, u, v):
+        # if u >= n_features it's a target i.e. it can have edges to any variables
+        # if not, then it's a feature and v must also be a feature i.e. < n_features
+        return u != v and (u >= self.n_features or v < self.n_features)
 
 
-def topsort(G: ssp.spmatrix, nodes=None, reverse=True):
+def topsort(G: ssp.spmatrix, nodes=None, reverse=False):
     order = []
     seen = set()
     explored = set()
