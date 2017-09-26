@@ -194,7 +194,7 @@ def topsort(G: ssp.spmatrix, nodes=None, reverse=False):
 
 def plot_digraph(graph: DiGraph):
     nx.draw_networkx(nx.from_scipy_sparse_matrix(graph, create_using=nx.DiGraph()))
-    pl.plot()
+    pl.show()
 
 
 def load_graph(path):

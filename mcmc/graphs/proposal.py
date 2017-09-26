@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.sparse as ssp
+from scipy.special import binom
 from collections import OrderedDict
 from itertools import product
 
@@ -49,7 +50,7 @@ class ParentSetDistribution:
 
     def sample(self, condition=None):
         if condition is None:
-            table = self.table
+            table = self.table.items()
         else:
             table = [kv for kv in self.table.items() if condition(kv[0])]
 
@@ -107,28 +108,11 @@ def get_parent_set_distributions(variables, fan_in, score_fn, condition=None, rn
 
 class GraphMove:
     @staticmethod
-    def moves(state):
-        raise NotImplementedError()
-
-    @staticmethod
-    def propose(self, state, arcs, scores):
+    def propose(state, scores, rng):
         raise NotImplementedError()
 
 
 class basic_move(GraphMove):
-    @staticmethod
-    def moves(state):
-        add = ssp.csr_matrix(1 - np.identity(state.shape[0], dtype=np.int))
-        add -= state.adj + state.ancestor_matrix
-
-        add = add.tolil()
-        add[:, state.adj.A.sum(axis=0) >= state.fan_in_] = 0
-
-        add_edges = list(zip(*add.nonzero()))
-        delete_arcs = list(zip(*state.adj.nonzero()))
-        
-        return add_edges, delete_arcs
-
     @staticmethod
     def _n_adds(state, fan_in):
         add = ssp.csr_matrix(1 - np.identity(state.shape[0], dtype=np.int))
@@ -145,23 +129,33 @@ class basic_move(GraphMove):
         return len(delete_arcs[0])
 
     @staticmethod
-    def propose(state, arcs, scores, rng):
-        new_state = state.copy()
+    def propose(state: DAGState, scores, rng):
 
-        can_add, can_delete = len(arcs[0]), len(arcs[1])
+        print('Selected Add/Delete')
+
+        add = ssp.csr_matrix(1 - np.identity(state.shape[0], dtype=np.int))
+        add -= state.adj + state.ancestor_matrix
+
+        add = add.tolil()
+        add[:, state.non_admissible_edges()] = 0
+
+        add_arcs = list(zip(*add.nonzero()))
+        delete_arcs = list(zip(*state.adj.nonzero()))
+
+        can_add, can_delete = len(add_arcs), len(delete_arcs)
         p = np.asarray([can_add, can_delete]) / (can_add + can_delete)
 
         # Moves: ADD - 0, DELETE - 1
         move = rng.choice([0, 1], p=p)
-        arcs = arcs[move]
+        new_state = state.copy()
 
         if move:
             # Sample one arc and delete it
-            u, v = arcs[rng.choice(can_delete)]
+            u, v = delete_arcs[rng.choice(can_delete)]
             new_state.remove_edge(u, v)
         else:
             # Else, sample one arc and add it
-            u, v = arcs[rng.choice(can_add)]
+            u, v = add_arcs[rng.choice(can_add)]
             new_state.add_edge(u, v)
 
         # Compute the ratio of the scores
@@ -173,7 +167,7 @@ class basic_move(GraphMove):
         # The probability of the move is the number of neighbors produced by addition and deletion.
         # The probability of the inverse is the same in the new graph
         q_move = can_add + can_delete
-        q_inv = basic_move._n_adds(new_state, state.fan_in_) + basic_move._n_deletes(new_state)
+        q_inv = basic_move._n_adds(new_state, state.fan_in) + basic_move._n_deletes(new_state)
 
         # Return the new state, acceptance ratio and ratio of scores in log space
         return new_state, z_ratio + np.log(q_move / q_inv), z_ratio
@@ -181,23 +175,26 @@ class basic_move(GraphMove):
 
 class rev_move(GraphMove):
     @staticmethod
-    def moves(state: DAGState):
-        # All arcs can be reversed
-        return list(zip(*state.adj.nonzero()))
+    def propose(state: DAGState, scores, rng):
+        print('Selected REV')
 
-    @staticmethod
-    def propose(state: DAGState, arcs, scores, rng):
+        arcs = state.adj.edges()
         n = len(arcs)
+
+        if not n:
+            return state, -np.inf, 0
+
         i, j = arcs[rng.choice(n)]
 
         # The descendants of i and j in the current graph
         dsc_i, dsc_j = frozenset(state.descendants(i)), frozenset(state.descendants(j))
         score_old = scores[i][frozenset(state.adj.parents(i))] + scores[j][frozenset(state.adj.parents(j))]
 
+        # Partition functions for the inverse move
         # Compute the z_score of i excluding it's descendants (including j).
         # Also the z_score* for j excluding it's descendants (i in its parent set)
         z_i = scores[i].log_z(lambda ps: ps.isdisjoint(dsc_i))
-        z_star_j = scores[j].log_z(lambda ps: i in ps and ps.isdisjoint(dsc_j))
+        z_star_j = scores[j].log_z(lambda ps: (i in ps) and ps.isdisjoint(dsc_j))
 
         new_state = state.copy()
         new_state.orphan([i, j])
@@ -219,13 +216,70 @@ class rev_move(GraphMove):
         return new_state, log_z_ratios + np.log(n / len(new_state.adj.nonzero()[0])), score_diff
 
 
-class ReattachMove(GraphMove):
-    def propose(self, state, arcs, scores):
-        pass
-
+class nbhr_move(GraphMove):
     @staticmethod
-    def moves(state: DAGState):
-        pass
+    def propose(state: DAGState, scores, rng):
+        print('Selected Reattach move')
+
+        node = rng.choice(state.adj.nodes())
+
+        # Disconnect the node
+        new_state = state.copy()
+        new_state.disconnect(node)
+
+        children = set(state.adj.children(node))
+
+        # Compute the change in score for each of the former children
+        if len(state.adj.children(node)):
+            delta_child_score = sum(scores[v][frozenset(new_state.adj.parents(v))] -
+                                    scores[v][frozenset(state.adj.parents(v))] for v in children)
+
+            inv_mp_m1 = np.log(2 ** (len(children) + 1) - 1)
+
+        else:
+            delta_child_score = 0
+            inv_mp_m1 = 0
+
+        # Sample a new parent set
+        new_ps, _ = scores[node].sample()
+        new_state.add_edges(product(new_ps, [node]))
+
+        # Compute the new parent set ratio of node
+        parent_set_ratio = scores[node][frozenset(new_state.adj.parents(node))] - \
+                           scores[node][frozenset(state.adj.parents(node))]
+
+        # Select arcs for addition
+        add = ssp.csr_matrix(1 - np.identity(new_state.shape[0], dtype=np.int))
+        add -= new_state.adj + new_state.ancestor_matrix
+
+        add = add.tolil()
+        add[:, new_state.non_admissible_edges()] = 0
+
+        add_arcs = np.asarray(list(filter(lambda e: e[0] == node and e[1] not in children, zip(*add.nonzero()))))
+        n_add_arcs = len(add_arcs)
+
+        if n_add_arcs:
+            # Probability of selecting an new children subset is proportional to the size of that subset.
+            # This ensures all edges are selected uniformly.
+            set_size_prob = [binom(n_add_arcs, i) for i in range(n_add_arcs + 1)]
+            k = rng.choice(len(add_arcs) + 1, p=set_size_prob / np.sum(set_size_prob))
+
+            if k:
+                add_arcs = add_arcs[rng.choice(n_add_arcs, size=k, replace=False)]
+                new_state.add_edges(add_arcs)
+
+                delta_child_score += sum(scores[v][frozenset(new_state.adj.parents(v))] -
+                                         scores[v][frozenset(state.adj.parents(v))] for _, v in add_arcs)
+
+            mp_m1 = np.log(2 ** (n_add_arcs + 1) - 1)
+
+        else:
+            mp_m1 = 0
+
+        score_ratio = delta_child_score + parent_set_ratio
+        hastings_coeff = mp_m1 - inv_mp_m1
+
+        return new_state, parent_set_ratio + hastings_coeff, score_ratio
 
 
 # noinspection PyAttributeOutsideInit
@@ -255,6 +309,7 @@ class DAGProposal(ProposalDistribution):
         A random number generator or seed used for sampling.
 
     """
+
     def __init__(self, moves, move_prob, score=BGe, fan_in=5, prior=None, random_state=None):
         super().__init__(prior=None, random_state=random_state)
 
@@ -286,33 +341,15 @@ class DAGProposal(ProposalDistribution):
             raise ValueError(
                 'Fan in restriction is {0} but graph has one parent set with bigger size'.format(self.fan_in))
 
-        has_move = []
-        move_arcs = []
-
-        state.fan_in_ = self.fan_in
-
-        for m in self.moves:
-            moves = m.moves(state)
-
-            has_move.append(bool(len(moves)))
-            move_arcs.append(moves)
-
-        move_prob = self.move_prob * has_move
-        move_prob /= move_prob.sum()
-
-        m = self.rng.choice(len(self.moves), p=move_prob)
-
-        new_state, acceptance, score_diff = self.moves[m].propose(state, move_arcs[m], self.ps_scores_, self.rng)
-
-        new_state.fan_in_ = self.fan_in
+        m = self.rng.choice(len(self.moves), p=self.move_prob)
+        new_state, acceptance, score_diff = self.moves[m].propose(state, self.ps_scores_, self.rng)
 
         # Maybe scale the probabilities by how likely it is to make the move?
-        # May be necessary if some moves can't be executed in some states.
+        # necessary if some moves can't be executed in some states.
 
         return new_state, acceptance, score_diff
 
     def random_state(self):
-        s = DAGState(random_dag(list(range(self.n_variables_)), self.fan_in, self.rng))
-        s.fan_in = self.fan_in
+        s = DAGState(random_dag(list(range(self.n_variables_)), self.fan_in, self.rng), fan_in=self.fan_in)
 
         return s

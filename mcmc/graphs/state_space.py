@@ -18,7 +18,7 @@ class DAGState:
 
     """
 
-    def __init__(self, graph: DiGraph, ancestor_matrix=None):
+    def __init__(self, graph: DiGraph, ancestor_matrix=None, fan_in=5):
         topsort(graph)
 
         self.adj = DiGraph(graph, shape=graph.shape, dtype=bool)
@@ -33,6 +33,7 @@ class DAGState:
             ancestor_matrix[node, ancestors] = 1
 
         self.ancestor_matrix = ancestor_matrix
+        self.fan_in = fan_in
 
     @property
     def shape(self):
@@ -132,6 +133,9 @@ class DAGState:
             ancestors = chain.from_iterable(self.ancestors(u) for u in parents)
 
             self.ancestor_matrix[n, list(set(chain(parents, ancestors)))] = True
+
+    def non_admissible_edges(self):
+        return self.adj.A.sum(axis=0) >= self.fan_in
 
 
 class RestrictionViolation(Exception):

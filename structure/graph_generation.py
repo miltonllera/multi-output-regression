@@ -20,7 +20,7 @@ def random_dag(variables, max_fan_in=-1, rng=None):
 
     for i, node in enumerate(variables[1:]):
         i += 1
-        n_parents = rng.choice(min(max_fan_in, i))
+        n_parents = rng.choice(min(max_fan_in, i) + 1)
         parents = rng.choice(variables[:i], size=n_parents, replace=False)
         if len(parents):
             g.add_edges([(p, node) for p in parents])

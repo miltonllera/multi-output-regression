@@ -89,18 +89,18 @@ class MHStructureSampler:
         graphs = [g.adj for g in graphs]
 
         if return_scores:
-            return Trace(graphs, hook.scores_)
+            return Trace(graphs, np.asarray(hook.scores_))
 
         return graphs
 
 
-class GraphDistribution:
+class DAGDistribution:
     """
-    Model the empirical distribution of graphs. Graphs samples obtained through some method are stored and used to
-    compute statistics like the probability of edges and parent sets.
+    Model the empirical distribution of DAGs. Samples obtained through some method (right now only MCMC is implemented)
+    are stored and used to compute statistics like the probability of edges and parent sets.
 
-    Due to fact that in general there are many more
-    graphs than can be sampled, estimating probabilities of graphs through joint samples of edges is not very robust.
+    Due to fact that in general there are many more graphs than can be sampled, estimating probabilities of graphs,
+    using the joint probability of arcs is not very robust.
 
     Parameters
     ----------

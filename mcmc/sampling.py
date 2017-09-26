@@ -100,15 +100,15 @@ class SamplingTrace(IterationHook):
         if p < r:
             self.accepted_ += 1
             if self.verbose:
-                print('Iteration {0}/{1}... accepted'.format(i + 1, n_steps))
+                print('Iteration {0}/{1}... accepted'.format(i, n_steps))
         else:
-            print('Iteration {0}/{1}... rejected'.format(i + 1, n_steps))
+            print('Iteration {0}/{1}... rejected'.format(i, n_steps))
 
-        print('\tCurrent graph score: {:.4f} \n\tAcceptance ratio: {:.2f}'.format(score, self.accepted_ / (i + 1)))
+        print('\tCurrent graph score: {:.4f} \n\tAcceptance ratio: {:.2f}'.format(score, self.accepted_ / i))
 
-        if i > self.discard and (i + 1) % self.save_iter == 0:
+        if i > self.discard and i % self.save_iter == 0:
             self.scores_.append(score)
-            self.accept_ratios_.append(self.accepted_ / (i + 1))
+            self.accept_ratios_.append(self.accepted_ / i)
 
 
 class StatePlotter(IterationHook):
