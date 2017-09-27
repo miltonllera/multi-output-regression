@@ -34,7 +34,7 @@ def create_dag():
     n_targets, n_features, max_parents = graph_params
     variables = list(range(n_features + n_features))
 
-    graph = random_dag(variables, max_fan_in=max_parents, rng=rng)
+    graph = random_dag(variables, fan_in=max_parents, rng=rng)
 
     return graph
 

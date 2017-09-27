@@ -145,15 +145,24 @@ class DiGraph(ssp.lil_matrix):
         return nx.from_scipy_sparse_matrix(self, create_using=nx.DiGraph())
 
 
-class RegressorDiGraph(DiGraph):
+class MBCGraph(DiGraph):
     def __init__(self, arg1, n_features, shape=None, dtype=None, copy=False, names=None):
         super().__init__(arg1, shape, dtype, copy, names)
         self.n_features = n_features
+
+    @property
+    def n_targets(self):
+        return self.shape[0] - self.n_features
 
     def is_valid_edge(self, u, v):
         # if u >= n_features it's a target i.e. it can have edges to any variables
         # if not, then it's a feature and v must also be a feature i.e. < n_features
         return u != v and (u >= self.n_features or v < self.n_features)
+
+    def copy(self):
+        arg1 = ssp.lil_matrix.copy(self)
+        a = MBCGraph(arg1=arg1, n_features=self.n_features, names=self._names)
+        return a
 
 
 def topsort(G: ssp.spmatrix, nodes=None, reverse=False):

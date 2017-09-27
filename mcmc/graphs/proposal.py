@@ -5,9 +5,9 @@ from collections import OrderedDict
 from itertools import product
 
 from metrics.score import BGe
-from mcmc.graphs.state_space import DAGState
+from mcmc.graphs.state_space import DAGState, MBCState
 from mcmc.sampling import ProposalDistribution
-from structure.graph_generation import random_dag
+from structure.graph_generation import random_dag, random_mbc
 from core.misc import get_rng, power_set
 
 
@@ -114,12 +114,12 @@ class GraphMove:
 
 class basic_move(GraphMove):
     @staticmethod
-    def _n_adds(state, fan_in):
+    def _n_adds(state):
         add = ssp.csr_matrix(1 - np.identity(state.shape[0], dtype=np.int))
         add -= state.adj + state.ancestor_matrix
 
         add = add.tolil()
-        add[:, state.adj.A.sum(axis=0) >= fan_in] = 0
+        add[state.non_admissible_edges()] = 0
 
         return len(add.nonzero()[0])
 
@@ -129,18 +129,24 @@ class basic_move(GraphMove):
         return len(delete_arcs[0])
 
     @staticmethod
-    def propose(state: DAGState, scores, rng):
-
-        print('Selected Add/Delete')
-
+    def moves(state):
         add = ssp.csr_matrix(1 - np.identity(state.shape[0], dtype=np.int))
         add -= state.adj + state.ancestor_matrix
 
         add = add.tolil()
-        add[:, state.non_admissible_edges()] = 0
+        add[state.non_admissible_edges()] = 0
 
         add_arcs = list(zip(*add.nonzero()))
         delete_arcs = list(zip(*state.adj.nonzero()))
+
+        return add_arcs, delete_arcs
+
+    @staticmethod
+    def propose(state: DAGState, scores, rng):
+
+        print('Selected Add/Delete')
+
+        add_arcs, delete_arcs = basic_move.moves(state)
 
         can_add, can_delete = len(add_arcs), len(delete_arcs)
         p = np.asarray([can_add, can_delete]) / (can_add + can_delete)
@@ -167,7 +173,7 @@ class basic_move(GraphMove):
         # The probability of the move is the number of neighbors produced by addition and deletion.
         # The probability of the inverse is the same in the new graph
         q_move = can_add + can_delete
-        q_inv = basic_move._n_adds(new_state, state.fan_in) + basic_move._n_deletes(new_state)
+        q_inv = basic_move._n_adds(new_state) + basic_move._n_deletes(new_state)
 
         # Return the new state, acceptance ratio and ratio of scores in log space
         return new_state, z_ratio + np.log(q_move / q_inv), z_ratio
@@ -175,10 +181,14 @@ class basic_move(GraphMove):
 
 class rev_move(GraphMove):
     @staticmethod
+    def moves(state):
+        return list(zip(*state.reversible_edges(rev=True)))
+
+    @staticmethod
     def propose(state: DAGState, scores, rng):
         print('Selected REV')
 
-        arcs = state.adj.edges()
+        arcs = rev_move.moves(state)
         n = len(arcs)
 
         if not n:
@@ -253,7 +263,7 @@ class nbhr_move(GraphMove):
         add -= new_state.adj + new_state.ancestor_matrix
 
         add = add.tolil()
-        add[:, new_state.non_admissible_edges()] = 0
+        add[new_state.non_admissible_edges()] = 0
 
         add_arcs = np.asarray(list(filter(lambda e: e[0] == node and e[1] not in children, zip(*add.nonzero()))))
         n_add_arcs = len(add_arcs)
@@ -327,6 +337,9 @@ class DAGProposal(ProposalDistribution):
         self.prior = prior
 
     def initialize(self, data, **kwargs):
+        if isinstance(data, tuple):
+            data = np.hstack(data)
+
         variables = data.shape[1]
         score = self.score(data)
 
@@ -350,6 +363,17 @@ class DAGProposal(ProposalDistribution):
         return new_state, acceptance, score_diff
 
     def random_state(self):
-        s = DAGState(random_dag(list(range(self.n_variables_)), self.fan_in, self.rng), fan_in=self.fan_in)
+        return DAGState(random_dag(list(range(self.n_variables_)), self.fan_in, self.rng), fan_in=self.fan_in)
 
-        return s
+
+# noinspection PyAttributeOutsideInit
+class MBCProposal(DAGProposal):
+    def initialize(self, data, **kwargs):
+        X, y = data
+        DAGProposal.initialize(self, data)
+        self.n_features_ = X.shape[1]
+
+    def random_state(self):
+        return MBCState(random_mbc(
+            self.n_features_, self.n_variables_ - self.n_features_, self.fan_in, self.rng), fan_in=self.fan_in
+        )

@@ -6,16 +6,17 @@ from numpy.random import RandomState
 from metrics.score import BGe
 from structure.graphs import plot_digraph
 from mcmc.graphs.sampler import MHStructureSampler, DAGDistribution
-from mcmc.graphs.proposal import DAGProposal, basic_move, rev_move, nbhr_move
-from mcmc.diagnostics import trace_plots, score_density_plot, edge_prob_scatter_plot
+from mcmc.graphs.proposal import MBCProposal, basic_move, rev_move, nbhr_move
+from mcmc.diagnostics import trace_plots, score_density_plot
 
-from structure.graph_generation import random_dag
+from structure.graph_generation import random_mbc
 from core.gaussian import sample_from_gn
 
 sns.set(color_codes=True)
 SAVE = False
 
 n_variables = 15
+n_features = 10
 seeds = list(range(101, 200))
 rng = RandomState(1802)
 variables = list(range(n_variables))
@@ -27,7 +28,7 @@ gen_var = np.zeros(n_variables) + 0.2
 gen_weight = 2
 
 # Generate some data form a GN
-graph = random_dag(variables, rng=rng, fan_in=5)
+graph = random_mbc(n_features, n_variables - n_features, rng=rng, fan_in=5)
 beta = graph.A.T * gen_weight
 
 sample_seed = rng.randint(0, 2 ** 32 - 1)
@@ -46,11 +47,12 @@ fan_in = 5
 moves = [basic_move, rev_move, nbhr_move]
 
 sampler = MHStructureSampler(
-    proposal=DAGProposal(moves, move_prob=[27/30, 1/15, 1/30], score=BGe, fan_in=5, random_state=rng),
+    proposal=MBCProposal(moves, move_prob=[27/30, 1/15, 1/30], score=BGe, fan_in=5, random_state=rng),
     n_steps=100000, sample_freq=1000, burn_in=50000, verbose=True, rng=rng
 )
 
-trace1 = sampler.generate_samples(data_gn, return_scores=True, debug=False)
+X, y = data_gn[:, :n_features], data_gn[:, n_features:]
+trace1 = sampler.generate_samples((X, y), return_scores=True, debug=False)
 samples1, scores1 = trace1
 g_dist1 = DAGDistribution(samples1)
 

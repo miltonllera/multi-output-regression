@@ -2,7 +2,7 @@ import numpy as np
 import scipy.sparse as ssp
 from itertools import chain
 
-from structure.graphs import DiGraph, topsort
+from structure.graphs import DiGraph, MBCGraph, topsort
 
 
 class DAGState:
@@ -18,10 +18,10 @@ class DAGState:
 
     """
 
-    def __init__(self, graph: DiGraph, ancestor_matrix=None, fan_in=5):
+    def __init__(self, graph: DiGraph, ancestor_matrix=None, fan_in=5, copy=False):
         topsort(graph)
 
-        self.adj = DiGraph(graph, shape=graph.shape, dtype=bool)
+        self.adj = graph if not copy else graph.copy()
 
         if ancestor_matrix is None:
             ancestor_matrix = ssp.lil_matrix(self.adj.shape, dtype=bool)
@@ -134,8 +134,42 @@ class DAGState:
 
             self.ancestor_matrix[n, list(set(chain(parents, ancestors)))] = True
 
+    def reversible_edges(self, rev=True):
+        if not rev:
+            raise NotImplementedError()
+
+        return self.adj.nonzero()
+
     def non_admissible_edges(self):
-        return self.adj.A.sum(axis=0) >= self.fan_in
+        return slice(None), self.adj.A.sum(axis=0) >= self.fan_in
+
+
+class MBCState(DAGState):
+    def __init__(self, graph: MBCGraph, ancestor_matrix=None, fan_in=5):
+        super().__init__(graph, ancestor_matrix, fan_in)
+        self.fixed_direction_edges = \
+            np.ix_(np.arange(self.adj.n_features), np.arange(self.adj.n_features + 1, self.shape[0]))
+
+    def copy(self):
+        return MBCState(self.adj.copy(), ancestor_matrix=self.ancestor_matrix.copy())
+
+    def non_admissible_edges(self):
+        edges = np.zeros(self.adj.shape, dtype=bool)
+        edges[:, self.adj.A.sum(axis=0) >= self.fan_in] = True
+        edges[np.ix_(range(self.adj.n_features), np.arange(self.adj.n_targets) + self.adj.n_features)] = True
+
+        return edges.nonzero()
+
+    def reversible_edges(self, rev=True):
+        if not rev:
+            raise NotImplementedError()
+
+        edges = np.ones(self.adj.shape, dtype=bool)
+        edges[np.ix_(np.arange(self.adj.n_targets) + self.adj.n_features, range(self.adj.n_features))] = False
+
+        edges = np.logical_and(edges, self.adj.A)
+
+        return edges.nonzero()
 
 
 class RestrictionViolation(Exception):
