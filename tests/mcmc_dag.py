@@ -47,14 +47,14 @@ moves = [basic_move, rev_move, nbhr_move]
 
 sampler = MHStructureSampler(
     proposal=DAGProposal(moves, move_prob=[27/30, 1/15, 1/30], score=BGe, fan_in=5, random_state=rng),
-    n_steps=100000, sample_freq=1000, burn_in=50000, verbose=True, rng=rng
+    n_steps=100000, sample_freq=100, burn_in=50000, verbose=True, rng=rng
 )
 
 trace1 = sampler.generate_samples(data_gn, return_scores=True, debug=False)
 samples1, scores1 = trace1
 g_dist1 = DAGDistribution(samples1)
 
-# trace2 = sampler.generate_samples(data_gn, return_scores=True, debug=False)
+# trace2 = sampler.generate_samples(data, return_scores=True, debug=False)
 # samples2, scores2 = trace2
 # g_dist2 = GraphDistribution(samples2)
 

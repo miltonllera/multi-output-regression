@@ -3,7 +3,7 @@ from numpy.random import RandomState
 from numpy.linalg import norm
 
 from structure.graph_generation import random_dag
-from core.gaussian import sample_from_gn, to_mvn, gn_params_mle
+from core.gaussian import sample_from_gn, to_mvn, gn_params
 from sklearn.linear_model import LinearRegression
 
 seeds = list(range(101, 200))
@@ -42,7 +42,7 @@ for i, s in enumerate(seeds):
 
     data_gn = sample_from_gn(graph, gen_mean, gen_var, beta, n_samples, sample_seed)
 
-    mu, var, b = gn_params_mle(graph, data_gn)
+    mu, var, b = gn_params(graph, data_gn)
     mu, sigma = to_mvn(mu, var, b, structure=graph)
 
     # print(beta)

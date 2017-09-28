@@ -240,7 +240,7 @@ class nbhr_move(GraphMove):
         children = set(state.adj.children(node))
 
         # Compute the change in score for each of the former children
-        if len(state.adj.children(node)):
+        if len(children):
             delta_child_score = sum(scores[v][frozenset(new_state.adj.parents(v))] -
                                     scores[v][frozenset(state.adj.parents(v))] for v in children)
 
@@ -287,9 +287,9 @@ class nbhr_move(GraphMove):
             mp_m1 = 0
 
         score_ratio = delta_child_score + parent_set_ratio
-        hastings_coeff = mp_m1 - inv_mp_m1
+        move_prob_ratio = mp_m1 - inv_mp_m1
 
-        return new_state, parent_set_ratio + hastings_coeff, score_ratio
+        return new_state, delta_child_score + move_prob_ratio, score_ratio
 
 
 # noinspection PyAttributeOutsideInit

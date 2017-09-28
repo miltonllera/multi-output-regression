@@ -3,6 +3,7 @@ import scipy.sparse.csgraph as csgraph
 import networkx as nx
 import pylab as pl
 import pygraphviz as pgv
+from itertools import product, chain
 
 
 class DiGraph(ssp.lil_matrix):
@@ -163,6 +164,18 @@ class MBCGraph(DiGraph):
         arg1 = ssp.lil_matrix.copy(self)
         a = MBCGraph(arg1=arg1, n_features=self.n_features, names=self._names)
         return a
+
+
+# Helper functions
+def possible_edges_iter(targets, feature):
+    edges = chain(product(targets, targets), product(targets, feature), product(feature, feature))
+    edges = filter(lambda e: e[0] != e[1], edges)
+
+    return edges
+
+
+def possible_edges(targets, features):
+    return list(possible_edges_iter(targets, features))
 
 
 def topsort(G: ssp.spmatrix, nodes=None, reverse=False):

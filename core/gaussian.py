@@ -8,7 +8,7 @@ from structure.graphs import DiGraph, topsort
 
 
 # noinspection PyTupleAssignmentBalance
-def gn_params_mle(network: DiGraph, data, sparse=False):
+def gn_params(network: DiGraph, data, sparse=False, l1_reg=0., l2_reg=0.):
     """
     Compute the MLE of the parameters for each Gaussian factor in the network. The MLE of a Gaussian Network given some
     data vector D is characterized by the unconditional mean, conditional variance and weights of the influence of the
@@ -25,6 +25,12 @@ def gn_params_mle(network: DiGraph, data, sparse=False):
     sparse: bool (default False)
         If true will return the weights as a sparse matrix instead of an numpy ndarray. Useful when the graph is sparse.
 
+    l1_reg: float
+        The strength of the penalty term used in L1 (LASSO) regularization.
+
+    l2_reg: float
+        The strength of the penalty term used in L2 (Ridge Regression) regularization.
+
     Returns
     -------
     (mean, var, beta): 3-tuple
@@ -40,6 +46,9 @@ def gn_params_mle(network: DiGraph, data, sparse=False):
     This method is numerically stable and runs in O(N * D^2)
 
     """
+    if l1_reg != 0:
+        raise NotImplementedError('L1 regularization not implemented')
+
     n, d = data.shape
 
     # Compute sufficient statistics
@@ -60,6 +69,10 @@ def gn_params_mle(network: DiGraph, data, sparse=False):
         if len(ps):
             X, y = data[:, ps], data[:, node]
 
+            if l2_reg != 0:
+                X = np.vstack((X, np.sqrt(l2_reg) * np.identity(len(ps))))
+                y = np.vstack((y, np.zeros(len(ps))))
+
             # # Solving for the coefficients
             w = linalg.lstsq(X, y)[0]
 
@@ -72,7 +85,15 @@ def gn_params_mle(network: DiGraph, data, sparse=False):
     return sample_mean, var, beta
 
 
-def mvn_params_mle(data):
+def gn_params_mle(network: DiGraph, data, sparse=False):
+    return gn_params(network, data, sparse)
+
+
+def gne_params_ridge(network: DiGraph, data, sparse=False, l2_reg=0.1):
+    return gn_params(network, data, sparse, l2_reg=l2_reg)
+
+
+def mvn_params(data):
     """
     Return de MLE estimate of a Multivariate Gaussian Distribution.
 
@@ -289,7 +310,7 @@ def update_normal_wishart_parameters(data, mu0, T0, k, v):
     return mu_n, Sn, kn, vn
 
 
-def mvn_mle(data, rng=None):
+def fit_mvn(data, rng=None):
     """
     Return the MVN whose parameters maximize the likelihood of the data as a Scipy frozen multivariate normal rv.
 
@@ -307,7 +328,7 @@ def mvn_mle(data, rng=None):
         The expected MVN
 
     """
-    mean, cov = mvn_params_mle(data)
+    mean, cov = mvn_params(data)
     return stats.multivariate_normal(mean=mean, cov=cov, seed=rng)
 
 

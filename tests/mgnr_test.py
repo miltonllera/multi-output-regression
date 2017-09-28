@@ -1,13 +1,12 @@
 import numpy as np
-import pylab as pl
 import seaborn as sns
 from numpy.random import RandomState
 
 from metrics.score import BGe
 from structure.graphs import plot_digraph
-from mcmc.graphs.sampler import MHStructureSampler, DAGDistribution
+from mcmc.graphs.sampler import MHStructureSampler
 from mcmc.graphs.proposal import MBCProposal, basic_move, rev_move, nbhr_move
-from mcmc.diagnostics import trace_plots, score_density_plot
+from model.mgnr import MGNREnsemble
 
 from structure.graph_generation import random_mbc
 from core.gaussian import sample_from_gn
@@ -32,9 +31,10 @@ graph = random_mbc(n_features, n_variables - n_features, rng=rng, fan_in=5)
 beta = graph.A.T * gen_weight
 
 sample_seed = rng.randint(0, 2 ** 32 - 1)
-data_gn = sample_from_gn(graph, gen_mean, gen_var, beta, n_samples, sample_seed)
+data = sample_from_gn(graph, gen_mean, gen_var, beta, n_samples, sample_seed)
+test = sample_from_gn(graph, gen_mean, gen_var, beta, n_samples, sample_seed)
 
-graph_score = BGe(data_gn)(graph)
+graph_score = BGe(data)(graph)
 
 print('Graph created with {} variables. Dataset with {} samples. Graphs bge score = {:.2f}'.format(
     n_variables, n_samples, graph_score))
@@ -50,33 +50,23 @@ move_probs = [13/15, 1/15, 1/15]
 # moves = [basic_move, rev_move]
 # move_probs = [14/15, 1/15]
 
+
+X, y = data[:, :n_features], data[:, n_features:]
+X_test, y_test = test[:, :n_features], data[:, n_features:]
+
 sampler = MHStructureSampler(
     proposal=MBCProposal(moves, move_prob=move_probs, score=BGe, fan_in=5, random_state=rng),
-    n_steps=100000, sample_freq=100, burn_in=50000, verbose=True, rng=rng
+    n_steps=10000, sample_freq=100, burn_in=5000, verbose=True, rng=rng
 )
 
-X, y = data_gn[:, :n_features], data_gn[:, n_features:]
-trace1 = sampler.generate_samples((X, y), return_scores=True, debug=False)
-samples1, scores1 = trace1
-g_dist1 = DAGDistribution(samples1)
+model = MGNREnsemble(k=100, optimizer=sampler, rng=rng, verbose=True).fit(X, y)
 
-# trace2 = sampler.generate_samples(data, return_scores=True, debug=False)
-# samples2, scores2 = trace2
-# g_dist2 = GraphDistribution(samples2)
+sq_error = 0
 
-trace_plots(samples1, scores1 - graph_score, graph.edges())
-score_density_plot(scores1)
+for x, y in zip(X_test, y_test):
+    predicted = model.predict(X).reshape(1, -1)
 
-# edge_prob_scatter_plot(g_dist1, g_dist2, graph.edges())
+    sq_error += (y - predicted) ** 2
 
-# g_dist = GraphDistribution(samples)
-#
-# params = g_dist.get_param_values(graph.edges())
-# rm = running_mean(params)
-#
-# fig, (ax1, ax2) = pl.subplots(nrows=2, sharex='col')
-#
-# sns.tsplot(rm, err_style='unit_traces', ax=ax1)
-# sns.tsplot(scores - graph_score, ax=ax2)
-
-pl.show()
+rmse = np.sqrt(sq_error / X_test.shape[0])
+print(rmse)
