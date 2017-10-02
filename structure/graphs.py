@@ -184,7 +184,7 @@ def topsort(G: ssp.spmatrix, nodes=None, reverse=False):
     explored = set()
 
     if nodes is None:
-        nodes = G.nodes_iter()
+        nodes = range(G.shape[0])
     for v in nodes:  # process all vertices in G
         if v in explored:
             continue

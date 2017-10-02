@@ -71,7 +71,7 @@ def gn_params(network: DiGraph, data, sparse=False, l1_reg=0., l2_reg=0.):
 
             if l2_reg != 0:
                 X = np.vstack((X, np.sqrt(l2_reg) * np.identity(len(ps))))
-                y = np.vstack((y, np.zeros(len(ps))))
+                y = np.hstack((y, np.zeros(len(ps))))
 
             # # Solving for the coefficients
             w = linalg.lstsq(X, y)[0]
@@ -89,7 +89,7 @@ def gn_params_mle(network: DiGraph, data, sparse=False):
     return gn_params(network, data, sparse)
 
 
-def gne_params_ridge(network: DiGraph, data, sparse=False, l2_reg=0.1):
+def gn_params_ridge(network: DiGraph, data, sparse=False, l2_reg=0.1):
     return gn_params(network, data, sparse, l2_reg=l2_reg)
 
 
@@ -171,7 +171,7 @@ def conditional_mvn_params(mean, sigma, given_values, return_cov=False):
     return cond_mean, cond_cov
 
 
-def to_mvn(mean, var, beta, structure, return_mvn=False, rng=None):
+def to_mvn(mean, var, beta, return_mvn=False, rng=None):
     """
     Transform the parameters of a Gaussian Network into the parameters of the corresponding Multivariate Normal
     distribution using the formulas in Schacter and Kenley (1989), Appendix B (can also be found in Murphy (2009)).
@@ -204,10 +204,11 @@ def to_mvn(mean, var, beta, structure, return_mvn=False, rng=None):
          mean and covariance matrix.
 
     """
+    top_sort = topsort(beta.T)
+
     if isinstance(beta, spmatrix):
         beta = beta.A
 
-    top_sort = topsort(structure)
     inv_top_sort = np.argsort(top_sort)
 
     I, W = np.eye(beta.shape[0]), beta[np.ix_(top_sort, top_sort)]

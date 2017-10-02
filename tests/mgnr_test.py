@@ -6,6 +6,8 @@ from metrics.score import BGe
 from structure.graphs import plot_digraph
 from mcmc.graphs.sampler import MHStructureSampler
 from mcmc.graphs.proposal import MBCProposal, basic_move, rev_move, nbhr_move
+
+from core.gaussian import to_mvn, gn_params_ridge
 from model.mgnr import MGNREnsemble
 
 from structure.graph_generation import random_mbc
@@ -56,16 +58,21 @@ X_test, y_test = test[:, :n_features], data[:, n_features:]
 
 sampler = MHStructureSampler(
     proposal=MBCProposal(moves, move_prob=move_probs, score=BGe, fan_in=5, random_state=rng),
-    n_steps=10000, sample_freq=100, burn_in=5000, verbose=True, rng=rng
+    n_steps=100000, sample_freq=100, burn_in=50000, verbose=True, rng=rng
 )
 
-model = MGNREnsemble(k=100, optimizer=sampler, rng=rng, verbose=True).fit(X, y)
+
+def parameter_estimator(structure, data):
+    return to_mvn(*gn_params_ridge(structure, data, sparse=True, l2_reg=0.1))
+
+
+model = MGNREnsemble(
+    k=100, parameter_estimator=parameter_estimator, structure_optimization=sampler, rng=rng, verbose=True).fit(X, y)
 
 sq_error = 0
 
 for x, y in zip(X_test, y_test):
-    predicted = model.predict(X).reshape(1, -1)
-
+    predicted = model.predict(x).reshape(1, -1)
     sq_error += (y - predicted) ** 2
 
 rmse = np.sqrt(sq_error / X_test.shape[0])

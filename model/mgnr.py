@@ -16,13 +16,17 @@ from mcmc.graphs.proposal import MBCProposal
 
 # noinspection PyAttributeOutsideInit
 class MGNR(BaseEstimator, RegressorMixin):
-    def __init__(self, parameter_fitter=None, verbose=False):
-        if parameter_fitter is None or parameter_fitter == 'mle':
-            parameter_fitter = lambda structure, data: to_mvn(*gn_params(structure, data))
+    def __init__(self, fit_params=None, verbose=False):
+        if fit_params is None or fit_params == 'mle':
+            fit_params = lambda structure, data: to_mvn(*gn_params(structure, data, sparse=True))
+        elif fit_params == 'ridge':
+            fit_params = lambda structure, data: to_mvn(*gn_params(structure, data, sparse=True, l2_reg=0.1))
+        elif callable(fit_params):
+            fit_params = fit_params
         else:
             raise NotImplementedError('Only mle estimation is currently available')
 
-        self.fit_params = parameter_fitter
+        self.fit_params = fit_params
         self.verbose = verbose
 
     @property
@@ -64,12 +68,12 @@ class MGNR(BaseEstimator, RegressorMixin):
         data = np.hstack((X, y))
         self.mean_, self.sigma_ = self.fit_params(structure, data)
 
-        features, targets = X.shape[1], y.shape[1]
+        features, targets = np.arange(X.shape[1]), np.arange(y.shape[1]) + X.shape[1]
 
         regression_structure = structure.copy()
-        regression_structure[list(range(features))] = False
+        regression_structure[list(features)] = False
 
-        n_comp, labels = csg.connected_components(regression_structure, directed=True)
+        n_comp, labels = csg.connected_components(regression_structure, directed=False)
 
         target_groups = [[] for _ in range(n_comp)]
         feature_groups = [[] for _ in range(n_comp)]
@@ -113,9 +117,11 @@ class MGNR(BaseEstimator, RegressorMixin):
             predicted_cov = np.zeros((self.n_targets_, self.n_targets_), dtype=np.float)
 
         for comp_f, comp_t in self.components_:
+            if not len(comp_t):
+                continue
 
             # x = X[comp_f[0]]
-            x = X
+            x = X[comp_f]
             comp_vars = list(chain(comp_f, comp_t))
             mean_ = self.mean_[comp_vars]
             cov_ = self.sigma_[np.ix_(comp_vars, comp_vars)]
@@ -123,12 +129,11 @@ class MGNR(BaseEstimator, RegressorMixin):
             cond_params = conditional_mvn_params(mean_, cov_, x, return_cov)
 
             if return_cov:
-                predictions[np.asarray(comp_t) - self.n_features] = cond_params[0]
                 x, y = list(zip(product(comp_t, repeat=2)))
                 predicted_cov[x, y] = cond_params[1]
-            else:
-                predictions[np.asarray(comp_t) - self.n_features] = cond_params
-                predicted_cov = None
+                cond_params = cond_params[0]
+
+            predictions[np.asarray(comp_t, dtype=int) - self.n_features] = cond_params
 
         return predictions if not return_cov else (predictions, predicted_cov)
 
@@ -146,7 +151,7 @@ class MGNR(BaseEstimator, RegressorMixin):
 
 class MGNREnsemble(BaseEstimator, RegressorMixin):
     # noinspection PyUnusedLocal
-    def __init__(self, k=1, optimizer=None, rng=None, verbose=False):
+    def __init__(self, k=1, parameter_estimator=None, structure_optimization=None, rng=None, verbose=False):
         """
         Initializes the models.
 
@@ -154,24 +159,27 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
         ----------
         k: int
             The number of sample networks used for prediction. k must be smaller or equal than the number of samples
-            returned by the optimizer.
-        optimizer: MHStructureOptimizer
+            returned by the struct_opt.
+        parameter_estimator: callable
+            The algorithm used to determine the values of the regression coefficients.
+        structure_optimization: MHStructureOptimizer
             The algorithm used to learn the structure of the model
         rng: RandomState, int or None (default)
             A random state for the class and al its members.
         """
-        if optimizer is None:
+        if structure_optimization is None:
             raise NotImplementedError()
 
         if k is None:
-            k = optimizer.returned_samples
+            k = structure_optimization.returned_samples
 
-        if k > optimizer.returned_samples:
-            raise ValueError('The optimizer is set to return less samples than expected: {0} > {1}'.format(
-                k, optimizer.returned_samples))
+        if k > structure_optimization.returned_samples:
+            raise ValueError('The structure_optimization is set to return less samples than expected: {0} > {1}'.format(
+                k, structure_optimization.returned_samples))
 
         self.rng = get_rng(rng)
-        self.optimizer = optimizer
+        self.param_estimator = parameter_estimator
+        self.struct_opt = structure_optimization
         self.k = k
         self.verbose = True
 
@@ -209,6 +217,7 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
     def set_params(self, **params):
         raise NotImplemented()
 
+    # noinspection PyAttributeOutsideInit
     def fit(self, X, y, samples=None):
         """
         Fits the model using MCMC sampling of the structure space and then uses a point estimation procedure for the
@@ -222,7 +231,7 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
         y: array like
             2-D array of target variables
         samples: list of tuples
-            Network structures. If None will use the optimizer to find a set of structures.
+            Network structures. If None will use the struct_opt to find a set of structures.
         Returns
         -------
         out: MGNREnsemble
@@ -234,7 +243,7 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
             print('learning structure...')
 
         if samples is None:
-            samples = self.optimizer.generate_samples((X, y), return_scores=True)
+            samples = self.struct_opt.generate_samples((X, y), return_scores=True)
 
         samples = sorted(zip(*samples), key=lambda s: s[1])
 
@@ -244,18 +253,12 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
         if self.verbose:
             print('fiting parameters...')
 
-        self._parameter_fit(X, y, networks)
+        self.models_ = [MGNR(self.param_estimator).fit(X, y, net) for net in networks]
 
         if self.verbose:
             print('done')
 
         return self
-
-    def _parameter_fit(self, X, y, network, estimate_type='mle'):
-        if estimate_type == 'mle':
-            self.models_ = [MGNR('mle').fit(X, y, net) for net in network]
-        else:
-            raise NotImplementedError()
 
     def predict(self, X):
         return np.mean([m.predict(X, return_cov=False) for m in self.models_], axis=0)
