@@ -101,10 +101,11 @@ class SamplingTrace(IterationHook):
             self.accepted_ += 1
             if self.verbose:
                 print('Iteration {0}/{1}... accepted'.format(i, n_steps))
-        else:
+        elif self.verbose:
             print('Iteration {0}/{1}... rejected'.format(i, n_steps))
 
-        print('\tCurrent graph score: {:.4f} \n\tAcceptance ratio: {:.2f}'.format(score, self.accepted_ / i))
+        if self.verbose:
+            print('\tCurrent graph score: {:.4f} \n\tAcceptance ratio: {:.2f}'.format(score, self.accepted_ / i))
 
         if i > self.discard and i % self.save_iter == 0:
             self.scores_.append(score)

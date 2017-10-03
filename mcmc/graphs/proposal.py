@@ -144,7 +144,7 @@ class basic_move(GraphMove):
     @staticmethod
     def propose(state: DAGState, scores, rng):
 
-        print('Selected Add/Delete')
+        # print('Selected Add/Delete')
 
         add_arcs, delete_arcs = basic_move.moves(state)
 
@@ -186,7 +186,7 @@ class rev_move(GraphMove):
 
     @staticmethod
     def propose(state: DAGState, scores, rng):
-        print('Selected REV')
+        # print('Selected REV')
 
         arcs = rev_move.moves(state)
         n = len(arcs)
@@ -229,7 +229,7 @@ class rev_move(GraphMove):
 class nbhr_move(GraphMove):
     @staticmethod
     def propose(state: DAGState, scores, rng):
-        print('Selected Reattach move')
+        # print('Selected Reattach move')
 
         node = rng.choice(state.adj.nodes())
 

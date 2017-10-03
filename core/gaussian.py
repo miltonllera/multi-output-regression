@@ -41,7 +41,7 @@ def gn_params(network: DiGraph, data, sparse=False, l1_reg=0., l2_reg=0.):
     Uses scipy.linalg.lstsq to find the Least Squares Solution to each conditional regression. This solves as:
 
         1 - Compute the QR decomposition of X: X = Q * R, where Q^T * Q = I and R is upper triangular
-        2 - Solve X * w = y <=>  R * w = Q^T * y
+        2 - Solve X * w = Y <=>  R * w = Q^T * Y
 
     This method is numerically stable and runs in O(N * D^2)
 
@@ -89,7 +89,7 @@ def gn_params_mle(network: DiGraph, data, sparse=False):
     return gn_params(network, data, sparse)
 
 
-def gn_params_ridge(network: DiGraph, data, sparse=False, l2_reg=0.1):
+def gn_params_ridge(network: DiGraph, data, sparse=False, l2_reg=0.2):
     return gn_params(network, data, sparse, l2_reg=l2_reg)
 
 

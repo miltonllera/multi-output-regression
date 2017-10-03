@@ -111,30 +111,40 @@ class MGNR(BaseEstimator, RegressorMixin):
         if not self.is_fitted:
             raise Exception()
 
-        predictions = np.zeros(self.n_targets_, dtype=np.float)
-
+        predictions = []
         if return_cov:
-            predicted_cov = np.zeros((self.n_targets_, self.n_targets_), dtype=np.float)
+            covariances = []
 
-        for comp_f, comp_t in self.components_:
-            if not len(comp_t):
-                continue
-
-            # x = X[comp_f[0]]
-            x = X[comp_f]
-            comp_vars = list(chain(comp_f, comp_t))
-            mean_ = self.mean_[comp_vars]
-            cov_ = self.sigma_[np.ix_(comp_vars, comp_vars)]
-
-            cond_params = conditional_mvn_params(mean_, cov_, x, return_cov)
+        for i, X_i in enumerate(X):
+            pred = np.zeros(self.n_targets_, dtype=np.float)
 
             if return_cov:
-                x, y = list(zip(product(comp_t, repeat=2)))
-                predicted_cov[x, y] = cond_params[1]
-                cond_params = cond_params[0]
+                predicted_cov = np.zeros((self.n_targets_, self.n_targets_), dtype=np.float)
 
-            predictions[np.asarray(comp_t, dtype=int) - self.n_features] = cond_params
+            for comp_f, comp_t in self.components_:
+                if not len(comp_t):
+                    continue
 
+                x = X_i[comp_f]
+                comp_vars = list(chain(comp_f, comp_t))
+                mean_ = self.mean_[comp_vars]
+                cov_ = self.sigma_[np.ix_(comp_vars, comp_vars)]
+
+                cond_params = conditional_mvn_params(mean_, cov_, x, return_cov)
+
+                if return_cov:
+                    x, y = list(zip(product(comp_t, repeat=2)))
+                    predicted_cov[x, y] = cond_params[1]
+                    cond_params = cond_params[0]
+
+                pred[np.asarray(comp_t, dtype=int) - self.n_features] = cond_params
+
+            predictions.append(pred)
+
+            if return_cov:
+                covariances.append(predicted_cov)
+
+        predictions = np.asarray(predictions)
         return predictions if not return_cov else (predictions, predicted_cov)
 
     @staticmethod
@@ -181,7 +191,7 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
         self.param_estimator = parameter_estimator
         self.struct_opt = structure_optimization
         self.k = k
-        self.verbose = True
+        self.verbose = verbose
 
     @property
     def n_vars(self):
@@ -263,11 +273,11 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
     def predict(self, X):
         return np.mean([m.predict(X, return_cov=False) for m in self.models_], axis=0)
 
-    def log_prob(self, y, X=None):
-        return np.log(self.prob(y, X))
+    def log_prob(self, Y, X=None):
+        return np.log(self.prob(Y, X))
 
-    def prob(self, y, X=None):
-        return np.mean([m.prob(X, y) for m in self.models_])
+    def prob(self, Y, X=None):
+        return np.mean([m.prob(X, Y) for m in self.models_])
 
 
 def save_model(model: MGNREnsemble, path):

@@ -2,6 +2,7 @@ import numpy as np
 import seaborn as sns
 from numpy.random import RandomState
 
+from sklearn.metrics import mean_squared_error
 from metrics.score import BGe
 from structure.graphs import plot_digraph
 from mcmc.graphs.sampler import MHStructureSampler
@@ -36,6 +37,9 @@ sample_seed = rng.randint(0, 2 ** 32 - 1)
 data = sample_from_gn(graph, gen_mean, gen_var, beta, n_samples, sample_seed)
 test = sample_from_gn(graph, gen_mean, gen_var, beta, n_samples, sample_seed)
 
+X, Y = data[:, :n_features], data[:, n_features:]
+X_test, Y_test = test[:, :n_features], data[:, n_features:]
+
 graph_score = BGe(data)(graph)
 
 print('Graph created with {} variables. Dataset with {} samples. Graphs bge score = {:.2f}'.format(
@@ -49,16 +53,9 @@ fan_in = 5
 moves = [basic_move, rev_move, nbhr_move]
 move_probs = [13/15, 1/15, 1/15]
 
-# moves = [basic_move, rev_move]
-# move_probs = [14/15, 1/15]
-
-
-X, y = data[:, :n_features], data[:, n_features:]
-X_test, y_test = test[:, :n_features], data[:, n_features:]
-
 sampler = MHStructureSampler(
     proposal=MBCProposal(moves, move_prob=move_probs, score=BGe, fan_in=5, random_state=rng),
-    n_steps=100000, sample_freq=100, burn_in=50000, verbose=True, rng=rng
+    n_steps=1000, sample_freq=10, burn_in=500, verbose=False, rng=rng
 )
 
 
@@ -67,13 +64,10 @@ def parameter_estimator(structure, data):
 
 
 model = MGNREnsemble(
-    k=100, parameter_estimator=parameter_estimator, structure_optimization=sampler, rng=rng, verbose=True).fit(X, y)
+    k=10, parameter_estimator=parameter_estimator, structure_optimization=sampler, rng=rng, verbose=False).fit(X, Y)
 
-sq_error = 0
+predicted = model.predict(X_test)
 
-for x, y in zip(X_test, y_test):
-    predicted = model.predict(x).reshape(1, -1)
-    sq_error += (y - predicted) ** 2
+rmse = np.sqrt(mean_squared_error(Y, predicted))
 
-rmse = np.sqrt(sq_error / X_test.shape[0])
 print(rmse)
