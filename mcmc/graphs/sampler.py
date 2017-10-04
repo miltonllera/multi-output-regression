@@ -82,9 +82,10 @@ class MHStructureSampler:
             hook = SamplingTrace(self.sample_freq, self.burn_in, verbose=self.verbose)
 
         s0 = self.proposal.random_state()
-
         graphs = metropolis_hastings(s0, self.proposal, self.n_steps, self.burn_in, self.sample_freq, hook, self.rng)
-        print('done.')
+
+        if self.verbose:
+            print('done.')
 
         graphs = [g.adj for g in graphs]
 

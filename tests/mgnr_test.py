@@ -26,12 +26,12 @@ n_samples = 200
 
 # Data generation parameters
 gen_mean = np.zeros(n_variables)
-gen_var = np.zeros(n_variables) + 0.2
-gen_weight = 2
+gen_var = rng.gamma(shape=1, size=n_variables)
+# gen_weight = 2
 
 # Generate some data form a GN
 graph = random_mbc(n_features, n_variables - n_features, rng=rng, fan_in=5)
-beta = graph.A.T * gen_weight
+beta = np.multiply(graph.A.T, rng.normal(0, 2, size=graph.shape))
 
 sample_seed = rng.randint(0, 2 ** 32 - 1)
 data = sample_from_gn(graph, gen_mean, gen_var, beta, n_samples, sample_seed)
