@@ -1,6 +1,6 @@
-# PyMOReg: Multi-Output Regression in Python 
+# PyMOReg: Multi-Output Regression in Python
 
-This library contains algorithms used to perform regression on multiple (correlated) outputs simultaneously. 
+This library contains algorithms used to perform regression on multiple (correlated) outputs simultaneously.
 
 ## Getting Started
 
@@ -27,9 +27,9 @@ These libraries come with the Anaconda bundle (www.anaconda.com) and for Linux u
 <sudo> apt-get install anaconda
 ```
 
-In case of Windows users an .exe installer is avalailable at (www.anaconda.com/download/). For a manual install of each 
+In case of Windows users an .exe installer is avalailable at (www.anaconda.com/download/). For a manual install of each
 library the user can execute:
-  
+
 ```
 conda install <library>
 
