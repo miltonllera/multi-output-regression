@@ -48,13 +48,13 @@ print('Graph created with {} variables. Dataset with {} samples. Graphs bge scor
 # plot_digraph(graph)
 
 # Fit the score and create the parent set distributions
-fan_in = 5
+fan_in = 3
 
 moves = [basic_move, rev_move, nbhr_move]
 move_probs = [13/15, 1/15, 1/15]
 
 sampler = MHStructureSampler(
-    proposal=MBCProposal(moves, move_prob=move_probs, score=BGe, fan_in=5, random_state=rng),
+    proposal=MBCProposal(moves, move_prob=move_probs, score=BGe, fan_in=fan_in, random_state=rng),
     n_steps=1000, sample_freq=10, burn_in=500, verbose=False, rng=rng
 )
 
@@ -64,7 +64,7 @@ def parameter_estimator(structure, data):
 
 
 model = MGNREnsemble(
-    k=50, parameter_estimator=parameter_estimator, structure_optimization=sampler, rng=rng, verbose=False).fit(X, Y)
+    k=50, parameter_estimator=parameter_estimator, structure_fitter=sampler, rng=rng, verbose=False).fit(X, Y)
 
 predicted = model.predict(X_test)
 

@@ -92,7 +92,7 @@ class DAGState:
         return u in self.ancestors(v)
 
     def copy(self):
-        return DAGState(self.adj.copy(), ancestor_matrix=self.ancestor_matrix.copy())
+        return DAGState(self.adj.copy(), ancestor_matrix=self.ancestor_matrix.copy(), fan_in=self.fan_in)
 
     def _propagate_add(self, u, v):
         """
@@ -151,7 +151,7 @@ class MBCState(DAGState):
             np.ix_(np.arange(self.adj.n_features), np.arange(self.adj.n_features + 1, self.shape[0]))
 
     def copy(self):
-        return MBCState(self.adj.copy(), ancestor_matrix=self.ancestor_matrix.copy())
+        return MBCState(self.adj.copy(), ancestor_matrix=self.ancestor_matrix.copy(), fan_in=self.fan_in)
 
     def non_admissible_edges(self):
         edges = np.zeros(self.adj.shape, dtype=bool)

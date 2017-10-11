@@ -145,6 +145,9 @@ class MGNR(BaseEstimator, RegressorMixin):
         predictions = np.asarray(predictions)
         return predictions if not return_cov else (predictions, predicted_cov)
 
+    def get_params(self, deep=True):
+        return {'fit_params': self.fit_params, 'verbose': self.verbose}
+
     @staticmethod
     def from_params(mean, sigma, components, n_targets):
         model = MGNR()
@@ -159,7 +162,7 @@ class MGNR(BaseEstimator, RegressorMixin):
 
 class MGNREnsemble(BaseEstimator, RegressorMixin):
     # noinspection PyUnusedLocal
-    def __init__(self, k=1, parameter_estimator=None, structure_optimization=None, rng=None, verbose=False):
+    def __init__(self, k=1, parameter_estimator=None, structure_fitter=None, rng=None, verbose=False):
         """
         Initializes the models.
 
@@ -167,27 +170,27 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
         ----------
         k: int
             The number of sample networks used for prediction. k must be smaller or equal than the number of samples
-            returned by the struct_opt.
+            returned by the structure_fitter.
         parameter_estimator: callable
             The algorithm used to determine the values of the regression coefficients.
-        structure_optimization: MHStructureOptimizer
+        structure_fitter: MHStructureOptimizer
             The algorithm used to learn the structure of the model
         rng: RandomState, int or None (default)
             A random state for the class and al its members.
         """
-        if structure_optimization is None:
+        if structure_fitter is None:
             raise NotImplementedError()
 
         if k is None:
-            k = structure_optimization.returned_samples
+            k = structure_fitter.returned_samples
 
-        if k > structure_optimization.returned_samples:
-            raise ValueError('The structure_optimization is set to return less samples than expected: {0} > {1}'.format(
-                k, structure_optimization.returned_samples))
+        if k > structure_fitter.returned_samples:
+            raise ValueError('The structure_fitter is set to return less samples than expected: {0} > {1}'.format(
+                k, structure_fitter.returned_samples))
 
         self.rng = get_rng(rng)
-        self.param_estimator = parameter_estimator
-        self.struct_opt = structure_optimization
+        self.parameter_estimator = parameter_estimator
+        self.structure_fitter = structure_fitter
         self.k = k
         self.verbose = verbose
 
@@ -220,7 +223,10 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
             raise NotFittedError
 
     def get_params(self, deep=True):
-        raise NotImplemented()
+        return {
+            'parameter_estimator': self.parameter_estimator, 'structure_fitter': self.structure_fitter,
+            'k': self.k, 'verbose': self.verbose
+        }
 
     def set_params(self, **params):
         raise NotImplemented()
@@ -239,7 +245,7 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
         y: array like
             2-D array of target variables
         samples: list of tuples
-            Network structures. If None will use the struct_opt to find a set of structures.
+            Network structures. If None will use the structure_fitter to find a set of structures.
         Returns
         -------
         out: MGNREnsemble
@@ -251,7 +257,7 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
             print('learning structure...')
 
         if samples is None:
-            samples = self.struct_opt.generate_samples((X, y), return_scores=True)
+            samples = self.structure_fitter.generate_samples((X, y), return_scores=True)
 
         samples = sorted(zip(*samples), key=lambda s: s[1])
 
@@ -261,7 +267,7 @@ class MGNREnsemble(BaseEstimator, RegressorMixin):
         if self.verbose:
             print('fiting parameters...')
 
-        self.models_ = [MGNR(self.param_estimator).fit(X, y, net) for net in networks]
+        self.models_ = [MGNR(self.parameter_estimator).fit(X, y, net) for net in networks]
 
         if self.verbose:
             print('done')

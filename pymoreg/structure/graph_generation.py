@@ -29,7 +29,7 @@ def random_mbc(n_features, n_targets, fan_in=-1, rng=None):
     rng = get_rng(rng)
     n_vars = n_features + n_targets
 
-    if fan_in is None:
+    if fan_in == -1:
         fan_in = n_vars - 1
 
     g = rng.randint(0, 2, size=(n_vars, n_vars))
