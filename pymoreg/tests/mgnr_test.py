@@ -22,7 +22,7 @@ n_features = 10
 seeds = list(range(101, 200))
 rng = RandomState(1802)
 variables = list(range(n_variables))
-n_samples = 200
+n_samples = 300
 
 # Data generation parameters
 gen_mean = np.zeros(n_variables)
@@ -48,14 +48,14 @@ print('Graph created with {} variables. Dataset with {} samples. Graphs bge scor
 # plot_digraph(graph)
 
 # Fit the score and create the parent set distributions
-fan_in = 3
+fan_in = 5
 
 moves = [basic_move, rev_move, nbhr_move]
 move_probs = [13/15, 1/15, 1/15]
 
 sampler = MHStructureSampler(
     proposal=MBCProposal(moves, move_prob=move_probs, score=BGe, fan_in=fan_in, random_state=rng),
-    n_steps=1000, sample_freq=10, burn_in=500, verbose=False, rng=rng
+    n_steps=10000, sample_freq=100, burn_in=5000, verbose=False, rng=rng
 )
 
 

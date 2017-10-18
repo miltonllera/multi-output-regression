@@ -128,12 +128,16 @@ class MGNR(BaseEstimator, RegressorMixin):
                 mean_ = self.mean_[comp_vars]
                 cov_ = self.sigma_[np.ix_(comp_vars, comp_vars)]
 
-                cond_params = conditional_mvn_params(mean_, cov_, x, return_cov)
+                if len(comp_f):
+                    cond_params = conditional_mvn_params(mean_, cov_, x, return_cov)
 
-                if return_cov:
-                    x, y = list(zip(product(comp_t, repeat=2)))
-                    predicted_cov[x, y] = cond_params[1]
-                    cond_params = cond_params[0]
+                    if return_cov:
+                        predicted_cov[np.ix_(comp_t, comp_t)] = cond_params[1]
+                        cond_params = cond_params[0]
+                else:
+                    cond_params = mean_
+                    if return_cov:
+                        predicted_cov = cov_
 
                 pred[np.asarray(comp_t, dtype=int) - self.n_features] = cond_params
 
@@ -143,7 +147,7 @@ class MGNR(BaseEstimator, RegressorMixin):
                 covariances.append(predicted_cov)
 
         predictions = np.asarray(predictions)
-        return predictions if not return_cov else (predictions, predicted_cov)
+        return predictions if not return_cov else (predictions, covariances)
 
     def get_params(self, deep=True):
         return {'fit_params': self.fit_params, 'verbose': self.verbose}
