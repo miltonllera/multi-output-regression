@@ -3,7 +3,7 @@ from itertools import product
 
 import numpy as np
 import scipy.sparse as ssp
-from scipy.special import binom
+from scipy.special import binom, logsumexp
 
 from pymoreg.core.misc import get_rng, power_set
 from pymoreg.metrics.score import BGe
@@ -78,8 +78,7 @@ class ParentSetDistribution:
         if len(selected) == 1:
             return selected[0]
 
-        c = selected.max()
-        return np.log(np.exp(selected - c).sum()) + c
+        return logsumexp(selected)
 
 
 def get_parent_set_distributions(variables, fan_in, score_fn, condition=None, rng=None):
@@ -246,7 +245,7 @@ class nbhr_move(GraphMove):
             delta_child_score = sum(scores[v][frozenset(new_state.adj.parents(v))] -
                                     scores[v][frozenset(state.adj.parents(v))] for v in children)
 
-            inv_mp_m1 = np.log(2 ** (len(children) + 1) - 1)
+            inv_mp_m1 = np.log(2 ** len(children) - 1)
 
         else:
             delta_child_score = 0
@@ -283,7 +282,7 @@ class nbhr_move(GraphMove):
                 delta_child_score += sum(scores[v][frozenset(new_state.adj.parents(v))] -
                                          scores[v][frozenset(state.adj.parents(v))] for _, v in add_arcs)
 
-            mp_m1 = np.log(2 ** (n_add_arcs + 1) - 1)
+            mp_m1 = np.log(2 ** n_add_arcs - 1)
 
         else:
             mp_m1 = 0
@@ -345,7 +344,9 @@ class DAGProposal(ProposalDistribution):
         variables = data.shape[1]
         score = self.score(data)
 
-        self.ps_scores_ = get_parent_set_distributions(variables, self.fan_in, score, rng=self.rng)
+        condition = kwargs['condition'] if 'condition' in kwargs else None
+
+        self.ps_scores_ = get_parent_set_distributions(variables, self.fan_in, score, rng=self.rng, condition=condition)
         self.score_fn_ = score
         self.n_variables_ = variables
 
@@ -363,6 +364,7 @@ class DAGProposal(ProposalDistribution):
         # necessary if some moves can't be executed in some states.
 
         return new_state, acceptance, score_diff
+        # return new_state, acceptance, score_diff, m
 
     def random_state(self):
         return DAGState(random_dag(list(range(self.n_variables_)), self.fan_in, self.rng), fan_in=self.fan_in)
@@ -372,10 +374,24 @@ class DAGProposal(ProposalDistribution):
 class MBCProposal(DAGProposal):
     def initialize(self, data, **kwargs):
         X, y = data
-        DAGProposal.initialize(self, data)
         self.n_features_ = X.shape[1]
+
+        def condition(var, ps):
+            if var >= self.n_features_:
+                return all(p >= self.n_features_ for p in ps)
+            return True
+
+        DAGProposal.initialize(self, data, condition=condition)
 
     def random_state(self):
         return MBCState(random_mbc(
             self.n_features_, self.n_variables_ - self.n_features_, self.fan_in, self.rng), fan_in=self.fan_in
         )
+
+# class CBD_prior:
+#     def __init__(self, min_comp, max_comp):
+#         self.min_comp = min_comp
+#         self.max_comp = max_comp
+#
+#     def __call__(self, network: DAGState):
+#         network.adj
