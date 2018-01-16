@@ -46,22 +46,23 @@ def metropolis_hastings(s0, proposal, n_steps=1000, burn_in=None, save_iter=1, i
 
     for i in range(n_steps):
 
-        next_s, acceptance, score_diff = proposal.sample(s)
-        # next_s, acceptance, score_diff, m = proposal.sample(s)
-        # proposed[m] += 1
+        # next_s, acceptance, score_diff = proposal.sample(s)
+        next_s, acceptance, score_diff, m = proposal.sample(s)
+
+        proposed[m] += 1
 
         r = np.exp(min(0, acceptance))
         p = rng.random_sample()
 
         if p < r:
-            print("accepted")
+            # print("accepted")
             s = next_s
             s_score += score_diff
 
-            # accepted[m] += 1
+            accepted[m] += 1
 
-        else:
-            print('rejected')
+        # else:
+        #     print('rejected')
 
         if i + 1 > burn_in and (i + 1) % save_iter == 0:
             samples.append(s)

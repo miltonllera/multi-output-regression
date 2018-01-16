@@ -3,7 +3,7 @@ from itertools import product
 
 import numpy as np
 import scipy.sparse as ssp
-from scipy.special import binom, logsumexp
+from scipy.special import binom, logsumexp, logit
 
 from pymoreg.core.misc import get_rng, power_set
 from pymoreg.metrics.score import BGe
@@ -227,6 +227,8 @@ class rev_move(GraphMove):
         return new_state, log_z_ratios + np.log(n / len(new_state.adj.nonzero()[0])), score_diff
 
 
+log2 = np.log(2)
+
 class nbhr_move(GraphMove):
     @staticmethod
     def propose(state: DAGState, scores, rng):
@@ -245,11 +247,8 @@ class nbhr_move(GraphMove):
             delta_child_score = sum(scores[v][frozenset(new_state.adj.parents(v))] -
                                     scores[v][frozenset(state.adj.parents(v))] for v in children)
 
-            inv_mp_m1 = np.log(2 ** len(children) - 1)
-
         else:
             delta_child_score = 0
-            inv_mp_m1 = 0
 
         # Sample a new parent set
         new_ps, _ = scores[node].sample()
@@ -282,13 +281,8 @@ class nbhr_move(GraphMove):
                 delta_child_score += sum(scores[v][frozenset(new_state.adj.parents(v))] -
                                          scores[v][frozenset(state.adj.parents(v))] for _, v in add_arcs)
 
-            mp_m1 = np.log(2 ** n_add_arcs - 1)
-
-        else:
-            mp_m1 = 0
-
         score_ratio = delta_child_score + parent_set_ratio
-        move_prob_ratio = mp_m1 - inv_mp_m1
+        move_prob_ratio = (n_add_arcs - len(children)) * log2
 
         return new_state, delta_child_score + move_prob_ratio, score_ratio
 
@@ -363,8 +357,8 @@ class DAGProposal(ProposalDistribution):
         # Maybe scale the probabilities by how likely it is to make the move?
         # necessary if some moves can't be executed in some states.
 
-        return new_state, acceptance, score_diff
-        # return new_state, acceptance, score_diff, m
+        # return new_state, acceptance, score_diff
+        return new_state, acceptance, score_diff, m
 
     def random_state(self):
         return DAGState(random_dag(list(range(self.n_variables_)), self.fan_in, self.rng), fan_in=self.fan_in)
