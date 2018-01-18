@@ -8,7 +8,7 @@ import seaborn as sns
 from pymoreg.mcmc import DAGDistribution
 
 
-def running_mean(traces):
+def moving_average(traces):
     if isinstance(traces, pd.DataFrame):
         traces = traces.values
     if isinstance(traces, OrderedDict):
@@ -48,29 +48,22 @@ def trace_plots(samples, scores, edges):
         raise ValueError('Unknown type of variable samples')
 
     params = samples.get_param_values(edges)
-    rm = running_mean(params)
+    rm = moving_average(params)
 
     fig, (ax1, ax2) = pl.subplots(nrows=2, sharex='col')
 
     sns.tsplot(rm, err_style='unit_traces', ax=ax1)
-    sns.tsplot(scores, ax=ax2)
-
-    pl.show()
+    sns.tsplot(scores - max(scores), ax=ax2)
 
 
-def edge_prob_scatter_plot(params1: DAGDistribution, params2: DAGDistribution, edges, hue=None):
+def edge_prob_scatter_plot(params1: DAGDistribution, params2: DAGDistribution, edges, edge_presence=None):
     probs1 = [params1.edge_prob(e) for e in edges]
     probs2 = [params2.edge_prob(e) for e in edges]
 
     df = pd.DataFrame()
     df['Run #1'] = probs1
     df['Run #2'] = probs2
-    df['hue'] = hue
+    df['Real arc'] = edge_presence
 
-    sns.lmplot('Run #1', 'Run #2', df, fit_reg=False)
-    pl.show()
-
-
-def score_density_plot(scores):
-    sns.distplot(scores)
-    pl.show()
+    sns.lmplot('Run #1', 'Run #2', df, fit_reg=True, ci=0, hue='Real arc')
+    pl.title('Comparison of arc presence probability for two independent runs')

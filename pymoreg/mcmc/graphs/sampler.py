@@ -120,7 +120,7 @@ class DAGDistribution:
 
     def edge_prob(self, e):
         u, v = e
-        return len(list(filter(lambda g: g[u, v], self.samples))) / len(self.samples)
+        return sum(g[u, v] for g in self.samples) / len(self.samples)
 
     def edge_conditional_prob(self, e, given):
         u, v = e
@@ -146,3 +146,14 @@ class DAGDistribution:
         parameter_traces = OrderedDict(kv_pairs)
 
         return parameter_traces
+
+    def get_param_probabilities(self, edges):
+        params = []
+        for e in edges:
+            params.append(self.edge_prob(e))
+
+        kv_pairs = sorted(zip(edges, params), key=lambda kv: kv[0])
+        parameter_traces = OrderedDict(kv_pairs)
+
+        return parameter_traces
+
